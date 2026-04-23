@@ -796,6 +796,38 @@
     renderProseBlock(container, para);
   }
 
+  /**
+   * Rule CRs often put "add the following line(s):" in one paragraph and the auditctl
+   * -a / -w lines in the next (separated by a blank line). Paragraph splitting would
+   * otherwise strand the dash lines without the phrase; merge those pairs into one block.
+   */
+  function mergeAdjacentAuditParagraphs(paras) {
+    const out = [];
+    const nl = String.fromCharCode(10);
+    const phraseRe = /add\s+the\s+following\s+lines?\b/i;
+    function firstNonEmptyLine(s) {
+      const lines = String(s).split(/\n/);
+      for (let j = 0; j < lines.length; j++) {
+        if (lines[j].trim()) return lines[j];
+      }
+      return "";
+    }
+    function startsDashBlock(s) {
+      return /^\s*-\S/.test(firstNonEmptyLine(s));
+    }
+    let i = 0;
+    while (i < paras.length) {
+      let cur = paras[i];
+      i++;
+      while (i < paras.length && phraseRe.test(cur) && startsDashBlock(paras[i])) {
+        cur = cur.trimEnd() + nl + paras[i].trimStart();
+        i++;
+      }
+      out.push(cur);
+    }
+    return out;
+  }
+
   function renderDescription(container, raw) {
     container.textContent = "";
     const text = raw == null ? "" : String(raw);
@@ -804,7 +836,7 @@
       return;
     }
     const normalized = preprocessDescription(text);
-    const paras = normalized.split(/\n(?:\s*\n)+/);
+    const paras = mergeAdjacentAuditParagraphs(normalized.split(/\n(?:\s*\n)+/));
     for (const p of paras) {
       if (p.trim()) renderParagraphChunk(container, p);
     }
