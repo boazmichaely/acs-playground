@@ -245,8 +245,8 @@
   /**
    * Whole identifiers that are usually infrastructure / API vocabulary and often appear
    * all-lowercase or with hyphens (not covered by PascalCase / camelCase rules).
-   * Reject a hyphen immediately before/after the match so `kubelet` is not styled inside
-   * `--kubelet-https` (word boundaries still exist between `-` and letters).
+   * Reject `/` or `-` immediately before the match so `kubelet` is not styled inside
+   * `/etc/kubernetes/kubelet.conf` or `--kubelet-https`. Same for trailing `-`.
    */
   const INFRA_ALLOWLIST = [
     "OAuth",
@@ -263,7 +263,7 @@
   ];
 
   const INFRA_INLINE_RE = new RegExp(
-    "(?<!-)\\b(" + INFRA_ALLOWLIST.map(escapeRe).join("|") + ")\\b(?!-)",
+    "(?<![/-])\\b(" + INFRA_ALLOWLIST.map(escapeRe).join("|") + ")\\b(?!-)",
     "gi"
   );
 
@@ -285,12 +285,14 @@
   const KEBAB_INLINE_RE = /(?<![#/:.\w])\b[a-z][a-z0-9]{2,}(?:-[a-z0-9]{2,}){2,}\b/gi;
 
   /** Hyphenated names where bare `etcd` would otherwise match only a substring. */
-  const ETCD_COMPOUND_RE = /\bopenshift-etcd\b|\betcd-pod\*?(?=\s|,|\.|;|\)|]|'|"|$)/gi;
+  const ETCD_COMPOUND_RE =
+    /(?<![/-])\bopenshift-etcd\b|(?<![/-])\betcd-pod\*?(?=\s|,|\.|;|\)|]|'|"|$)/gi;
 
   /**
    * Standalone `etcd` (not `openshift-etcd`, not `etcd-pod`, not `etcd-all` path segments).
+   * Skip when preceded by `/` or `-` so path fragments are not split into code spans.
    */
-  const ETCD_STANDALONE_RE = /(?<!openshift-)\betcd\b(?![-a-z*])/gi;
+  const ETCD_STANDALONE_RE = /(?<![/-])(?<!openshift-)\betcd\b(?![-a-z*])/gi;
 
   /**
    * Kubernetes / OpenShift resource kind names (exact API casing). Only applied inside
