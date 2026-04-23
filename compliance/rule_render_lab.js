@@ -65,12 +65,12 @@
 
   /**
    * Boilerplate before recipe lines: auditctl (-a / -w …) or simple config assignments (KEY = VAL).
-   * Extend the alternation when new catalog phrasing appears; do not glob-scan whole descriptions.
+   * Phrases are catalog-driven (see maintenance scan); extend the alternation for new wording only.
    */
   const AUDIT_ADD_LINE_PHRASE_RE_GI =
-    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b|(?<!or\s)modify\s+the\s+following\s+lines?\b)/gi;
+    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|use\s+following\s+lines\b|add\s+the\s+line\s+to\b|add\s+the\s+rule\s+to\b|add\s+the\s+lines\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b|(?<!or\s)modify\s+the\s+following\s+lines?\b|the\s+following\s+audit\s+rules?\b|the\s+following\s+line\s+structure\b)/gi;
   const AUDIT_ADD_LINE_PHRASE_RE_I =
-    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b|(?<!or\s)modify\s+the\s+following\s+lines?\b)/i;
+    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|use\s+following\s+lines\b|add\s+the\s+line\s+to\b|add\s+the\s+rule\s+to\b|add\s+the\s+lines\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b|(?<!or\s)modify\s+the\s+following\s+lines?\b|the\s+following\s+audit\s+rules?\b|the\s+following\s+line\s+structure\b)/i;
 
   /** auditd.conf-style assignment after a caption (catalog uses simple keys and placeholders). */
   const AUDIT_RECIPE_CONF_ASSIGN = /^\s*[A-Za-z0-9_.]+\s*=\s*\S/;
