@@ -1,0 +1,1104 @@
+{
+  "profiles": [
+    {
+      "profile": "ocp4-stig-node",
+      "rules": [
+        {
+          "id": "ocp4-file-owner-groupowner-permissions-pod-logs",
+          "title": "Kubernetes Pod Logs Must Be Owned and Group Owned By Root and have permissions 755",
+          "description": "All logs must be owned by root user and group and have permissions 755. By default, the path for the Kubernetes pod logs is\n\n/var/log/pods/\n\n.\n\nIf any of the files have incorrect permissions or ownerhship, change the permissions and ownership of files located under \"/var/log/pods\" to protect from unauthorized access. 1. Execute the following to set the output of pods readable only by the owner: for node in $(oc get node -oname); do oc debug $node -- chroot /host /bin/bash -c 'echo -n \"$HOSTNAME \"; find /var/log/pods/ -type f \\( -perm /022 -o -perm /044 \\) | xargs -r chmod 600' 2>/dev/null; done 2. Execute the following to set the group and group-ownership to root for files that store the output of pods: for node in $(oc get node -oname); do oc debug $node -- chroot /host /bin/bash -c 'echo -n \"$HOSTNAME \"; find /var/log/pods/ -type f \\! -user 0 | xargs -r chown root:root' 2>/dev/null; done"
+        },
+        {
+          "id": "ocp4-kubelet-configure-tls-min-version",
+          "title": "Ensure Kubelet is configured with allowed TLS versions",
+          "description": "The configuration tlsSecurityProfile specifies TLS configurations to be used while establishing connections with the externally exposed servers. Though secure transport mode is used for establishing connections, the protocols used may not always be strong enough to avoid interception and manipulation of the data in transport. TLS Security profile configured should not make use of any protocols, ciphers, and algorithms with known security vulnerabilities.\n\ntlsSecurityProfile can be configured to use one of custom, intermediate, modern, or old profile. Profile Old should be avoided at all times and when using custom profile one should be extremely careful as invalid configurations can be catastrophic. It is always advised to configure minimum TLS version to TLSv1.2 or latest when using Custom profile or to use predefined profiles Intermediate or modern. If a TLS security profile is not configured, the default TLS security profile is Intermediate.\n\nTo configure Custom tlsSecurityProfile for the Kubelet with TLSv1.2 as minimum TLS version, create a new or modify existing KubeletConfig object along these lines, one for every MachineConfigPool :\n\n apiVersion: machineconfiguration.openshift.io/v1\n kind: KubeletConfig\n metadata:\n     name: kubelet-tls-config-$pool\n spec:\n     tlsSecurityProfile:\n         type: Custom\n         custom:\n             ciphers:\n             - ECDHE-ECDSA-CHACHA20-POLY1305\n             - ECDHE-RSA-CHACHA20-POLY1305\n             - ECDHE-RSA-AES128-GCM-SHA256\n             - ECDHE-ECDSA-AES128-GCM-SHA256\n             minTLSVersion:  VersionTLS12 \n     machineConfigPoolSelector:\n         matchLabels:\n             pools.operator.machineconfiguration.openshift.io/$pool_name: \"\"\n \n\nIn order to configure this rule to check for an alternate TLS version, both var_kubelet_tls_min_version_regex and var_kubelet_tls_min_version should be updated.\n\nFor more information, follow OpenShift documentation: the relevant documentation ( https://docs.openshift.com/container-platform/4.11/nodes/nodes/nodes-nodes-tls.html )."
+        },
+        {
+          "id": "ocp4-reject-unsigned-images-by-default",
+          "title": "Ensure the Container Runtime rejects unsigned images by default",
+          "description": "The OpenShift Platform allows for verifying the signature of a container image before pulling it. this is done via the policy.json file [1] which needs to be configured via the Machine Config Operator [2].\n\nEnsure that the default policy is \"reject\" in /etc/containers/policy.json , which should look as follows:\n\n {\n   \"default\": [{\"type\": \"reject\"}],\n   \"transports\":\n   ...\n }\n\nAddition of allowed registries must be an explicit action to ensure that only containers from allowed registries are used.\n\n[1] https://github.com/containers/image/blob/main/docs/containers-policy.json.5.md\n\n[2] https://docs.openshift.com/container-platform/latest/security/container_security/security-container-signature.html"
+        }
+      ]
+    },
+    {
+      "profile": "ocp4-e8",
+      "rules": [
+        {
+          "id": "ocp4-api-server-encryption-provider-cipher",
+          "title": "Configure the Encryption Provider Cipher",
+          "description": "When you enable etcd encryption, the following OpenShift API server and Kubernetes API server resources are encrypted:\n\n* Secrets\n* ConfigMaps\n* Routes\n* OAuth access tokens\n* OAuth authorize tokens\n\nWhen you enable etcd encryption, encryption keys are created. These keys are rotated on a weekly basis. You must have these keys in order to restore from an etcd backup.\n\nTo ensure the correct cipher, set the encryption type to aescbc or aesgcm in the apiserver object which configures the API server itself.\n\nspec:\n encryption:\n   type: aescbc\n\nFor more information, follow the relevant documentation ( https://docs.openshift.com/container-platform/latest/security/encrypting-etcd.html )."
+        },
+        {
+          "id": "ocp4-api-server-tls-cipher-suites",
+          "title": "Use Strong Cryptographic Ciphers on the API Server",
+          "description": "To ensure that the API Server is configured to only use strong cryptographic ciphers, verify the openshift-kube-apiserver configmap contains the following set of ciphers, with no additions:\n\n\"servingInfo\":{\n ...\n \"cipherSuites\": [\n   \"TLS_AES_128_GCM_SHA256\",\n   \"TLS_AES_256_GCM_SHA384\",\n   \"TLS_CHACHA20_POLY1305_SHA256\",\n   \"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256\",\n   \"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256\",\n   \"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\",\n   \"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384\",\n   \"TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256\",\n   \"TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256\",\n ],\n ..."
+        },
+        {
+          "id": "ocp4-ocp-allowed-registries",
+          "title": "Allowed registries are configured",
+          "description": "The configuration registrySources.allowedRegistries determines the permitted registries that the OpenShift container runtime can access for builds and pods. This configuration setting ensures that all registries other than those specified are blocked. You can set the allowed repositories by applying the following manifest using\n\noc patch\n\n, e.g. if you save the following snippet to\n\n/tmp/allowed-registries-patch.yaml\n\nspec:\n registrySources:\n   allowedRegistries:\n   - my-trusted-registry.internal.example.com\n\nyou would call\n\noc patch image.config.openshift.io cluster --patch=\"$(cat /tmp/allowed-registries-patch.yaml)\" --type=merge"
+        },
+        {
+          "id": "ocp4-ocp-allowed-registries-for-import",
+          "title": "Allowed registries for import are configured",
+          "description": "The configuration allowedRegistriesForImport limits the container image registries from which normal users may import images. This is important to control, as a user who can stand up a malicious registry can then import content which claims to include the SHAs of legitimate content layers. You can set the allowed repositories for import by applying the following manifest using\n\noc patch\n\n, e.g. if you save the following snippet to\n\n/tmp/allowed-import-registries-patch.yaml\n\nspec:\n allowedRegistriesForImport:\n - domainName: my-trusted-registry.internal.example.com\n   insecure: false\n\nyou would call\n\noc patch image.config.openshift.io cluster --patch=\"$(cat /tmp/allowed-import-registries-patch.yaml)\" --type=merge"
+        },
+        {
+          "id": "ocp4-ocp-idp-no-htpasswd",
+          "title": "Do Not Use htpasswd-based IdP",
+          "description": "For users to interact with OpenShift Container Platform, they must first authenticate to the cluster. The authentication layer identifies the user associated with requests to the OpenShift Container Platform API. The authorization layer then uses information about the requesting user to determine if the request is allowed. Understanding authentication | Authentication | OpenShift Container Platform ( https://docs.openshift.com/container-platform/latest/logging/cluster-logging-external.html )\n\nThe OpenShift Container Platform includes a built-in OAuth server for token-based authentication. Developers and administrators obtain OAuth access tokens to authenticate themselves to the API. It is recommended for an administrator to configure OAuth to specify an identity provider after the cluster is installed. User access to the cluster is managed through the identity provider. Understanding identity provider configuration | Authentication | OpenShift Container Platform ( https://docs.openshift.com/container-platform/latest/authentication/understanding-identity-provider.html )\n\nHowever, not all Identity Providers supported by OpenShift provide the same level of capabilities. As an example, the htpasswd Identity Provider only checks the username and password match and provides no means of 2FA, account lockout or notification mechanism. This rule therefore only allows a subset of identity providers."
+        },
+        {
+          "id": "ocp4-rbac-limit-cluster-admin",
+          "title": "Ensure that the cluster-admin role is only used where required",
+          "description": "The RBAC role cluster-admin provides wide-ranging powers over the environment and should be used only where and when needed."
+        },
+        {
+          "id": "ocp4-rbac-pod-creation-access",
+          "title": "Minimize Access to Pod Creation",
+          "description": "The ability to create pods in a namespace can provide a number of opportunities for privilege escalation. Where applicable, remove create access to pod objects in the cluster."
+        },
+        {
+          "id": "ocp4-rbac-wildcard-use",
+          "title": "Minimize Wildcard Usage in Cluster and Local Roles",
+          "description": "Kubernetes Cluster and Local Roles provide access to resources based on sets of objects and actions that can be taken on those objects. It is possible to set either of these using a wildcard * which matches all items. This violates the principle of least privilege and leaves a cluster in a more vulnerable state to privilege abuse."
+        },
+        {
+          "id": "ocp4-scc-limit-container-allowed-capabilities",
+          "title": "Limit Container Capabilities",
+          "description": "Containers should not enable more capabilites than needed as this opens the door for malicious use. To enable only the required capabilities, the appropriate Security Context Constraints (SCCs) should set capabilities as a list in allowedCapabilities.\n\nIn case an SCC outside the default allow list in the variable var-sccs-with-allowed-capabilities-regex is being flagged, create a TailoredProfile and add the additional SCC to the regular expression in the variable var-sccs-with-allowed-capabilities-regex. An example allowing an SCC named additional follows:\n\napiVersion: compliance.openshift.io/v1alpha1\nkind: TailoredProfile\nmetadata:\n name: cis-additional-scc\nspec:\n description: Allows an additional scc\n setValues:\n - name: ocp4-var-sccs-with-allowed-capabilities-regex\n   rationale: Allow our own custom SCC\n   value: ^privileged$|^hostnetwork-v2$|^restricted-v2$|^nonroot-v2$|^additional$\n extends: ocp4-cis\n title: Modified CIS allowing one more SCC\n\nFinally, reference this TailoredProfile in a ScanSettingBinding For more information on Tailoring the Compliance Operator, please consult the OpenShift documentation: https://docs.openshift.com/container-platform/latest/security/compliance_operator/co-scans/compliance-operator-tailor.html"
+        },
+        {
+          "id": "ocp4-scc-limit-privilege-escalation",
+          "title": "Limit Containers Ability to Escalate Privileges",
+          "description": "Containers should be limited to only the privileges required to run and should not be allowed to escalate their privileges. To prevent containers from escalating privileges, the appropriate Security Context Constraints (SCCs) should set allowPrivilegeEscalation to false."
+        },
+        {
+          "id": "ocp4-scc-limit-privileged-containers",
+          "title": "Limit Privileged Container Use",
+          "description": "Containers should be limited to only the privileges required to run. To prevent containers from running as privileged containers, the appropriate Security Context Constraints (SCCs) should set allowPrivilegedContainer to false."
+        },
+        {
+          "id": "ocp4-scc-limit-root-containers",
+          "title": "Limit Container Running As Root User",
+          "description": "Containers should run as a random non-privileged user. To prevent containers from running as root user, the appropriate Security Context Constraints (SCCs) should set.runAsUser.type to MustRunAsRange."
+        },
+        {
+          "id": "ocp4-version-detect-in-hypershift",
+          "title": "This is a helper rule to fetch the required api resource for detecting HyperShift OCP version",
+          "description": "no description"
+        },
+        {
+          "id": "ocp4-version-detect-in-ocp",
+          "title": "This is a helper rule to fetch the required api resource for detecting OCP version",
+          "description": "no description"
+        }
+      ]
+    },
+    {
+      "profile": "ocp4-cis",
+      "rules": [
+        {
+          "id": "ocp4-accounts-restrict-service-account-tokens",
+          "title": "Restrict Automounting of Service Account Tokens",
+          "description": "Service accounts tokens should not be mounted in pods except where the workload running in the pod explicitly needs to communicate with the API server. To ensure pods do not automatically mount tokens, set automountServiceAccountToken to false."
+        },
+        {
+          "id": "ocp4-accounts-unique-service-account",
+          "title": "Ensure Usage of Unique Service Accounts",
+          "description": "Using the default service account prevents accurate application rights review and audit tracing. Instead of default , create a new and unique service account with the following command:\n\n$ oc create sa service_account_name\n      \n\nwhere service_account_name is the name of a service account that is needed in the project namespace."
+        },
+        {
+          "id": "ocp4-api-server-admission-control-plugin-alwaysadmit",
+          "title": "Disable the AlwaysAdmit Admission Control Plugin",
+          "description": "To ensure OpenShift only responses to requests explicitly allowed by the admission control plugin. Check that the config ConfigMap object does not contain the AlwaysAdmit plugin."
+        },
+        {
+          "id": "ocp4-api-server-admission-control-plugin-alwayspullimages",
+          "title": "Ensure that the Admission Control Plugin AlwaysPullImages is not set",
+          "description": "The AlwaysPullImages admission control plugin should be disabled, since it can introduce new failure modes for control plane components if an image registry is unreachable."
+        },
+        {
+          "id": "ocp4-api-server-admission-control-plugin-namespacelifecycle",
+          "title": "Enable the NamespaceLifecycle Admission Control Plugin",
+          "description": "OpenShift enables the NamespaceLifecycle plugin by default."
+        },
+        {
+          "id": "ocp4-api-server-admission-control-plugin-noderestriction",
+          "title": "Enable the NodeRestriction Admission Control Plugin",
+          "description": "To limit the Node and Pod objects that a kubelet could modify, ensure that the NodeRestriction plugin on kubelets is enabled in the api-server configuration by running the following command:\n\n$ oc -n openshift-kube-apiserver get configmap config -o json | jq -r '.data.\"config.yaml\"' | jq '.apiServerArguments.\"enable-admission-plugins\"'"
+        },
+        {
+          "id": "ocp4-api-server-admission-control-plugin-scc",
+          "title": "Enable the SecurityContextConstraint Admission Control Plugin",
+          "description": "To ensure pod permissions are managed, make sure that the SecurityContextConstraint admission control plugin is used."
+        },
+        {
+          "id": "ocp4-api-server-admission-control-plugin-service-account",
+          "title": "Enable the ServiceAccount Admission Control Plugin",
+          "description": "To ensure ServiceAccount objects must be created and granted before pod creation is allowed, follow the documentation and create ServiceAccount objects as per your environment. Ensure that the plugin is enabled in the api-server configuration:\n\n$ oc -n openshift-kube-apiserver get configmap config -o json | jq -r '.data.\"config.yaml\"' | jq '.apiServerArguments.\"enable-admission-plugins\"'"
+        },
+        {
+          "id": "ocp4-api-server-anonymous-auth",
+          "title": "Ensure that anonymous requests to the API Server are authorized",
+          "description": "By default, anonymous access to the OpenShift API is enabled, but at the same time, all requests must be authorized. If no authentication mechanism is used, the request is assigned the system:anonymous virtual user and the system:unauthenticated virtual group. This allows the authorization layer to determine which requests, if any, is an anonymous user authorized to make. To verify the authorization rules for anonymous requests run the following:\n\n$ oc describe clusterrolebindings\n\nand inspect the bindings of the system:anonymous virtual user and the system:unauthenticated virtual group. To test that an anonymous request is authorized to access the readyz endpoint, run:\n\n$ oc get --as=\"system:anonymous\" --raw='/readyz?verbose'\n\nIn contrast, a request to list all projects should not be authorized:\n\n$ oc get --as=\"system:anonymous\" projects"
+        },
+        {
+          "id": "ocp4-api-server-audit-log-maxbackup",
+          "title": "Configure the Kubernetes API Server Maximum Retained Audit Logs",
+          "description": "To configure how many rotations of audit logs are retained, edit the openshift-kube-apiserver configmap and set the audit-log-maxbackup parameter to 10 or to an organizationally appropriate value:\n\n\"apiServerArguments\":{\n ...\n \"audit-log-maxbackup\": [10],\n ..."
+        },
+        {
+          "id": "ocp4-api-server-audit-log-maxsize",
+          "title": "Configure Kubernetes API Server Maximum Audit Log Size",
+          "description": "To rotate audit logs upon reaching a maximum size, edit the openshift-kube-apiserver configmap and set the audit-log-maxsize parameter to an appropriate size in MB. For example, to set it to 100 MB:\n\n\"apiServerArguments\":{\n ...\n \"audit-log-maxsize\": [\"100\"],\n ..."
+        },
+        {
+          "id": "ocp4-api-server-audit-log-path",
+          "title": "Configure the Audit Log Path",
+          "description": "To enable auditing on the Kubernetes API Server, the audit log path must be set. Edit the openshift-kube-apiserver configmap and set the audit-log-path to a suitable path and file where audit logs should be written. For example:\n\n\"apiServerArguments\":{\n ...\n \"audit-log-path\":\"/var/log/kube-apiserver/audit.log\",\n ..."
+        },
+        {
+          "id": "ocp4-api-server-auth-mode-no-aa",
+          "title": "The authorization-mode cannot be AlwaysAllow",
+          "description": "Do not always authorize all requests."
+        },
+        {
+          "id": "ocp4-api-server-auth-mode-rbac",
+          "title": "Ensure authorization-mode RBAC is configured",
+          "description": "To ensure OpenShift restricts different identities to a defined set of operations they are allowed to perform, check that the API server's authorization-mode configuration option list contains RBAC."
+        },
+        {
+          "id": "ocp4-api-server-bind-address",
+          "title": "Ensure that the bindAddress is set to a relevant secure port",
+          "description": "The bindAddress is set by default to 0.0.0.0:6443 , and listening with TLS enabled."
+        },
+        {
+          "id": "ocp4-api-server-client-ca",
+          "title": "Configure the Client Certificate Authority for the API Server",
+          "description": "Certificates must be provided to fully setup TLS client certificate authentication. To ensure the API Server utilizes its own TLS certificates, the clientCA must be configured. Verify that servingInfo has the clientCA configured in the openshift-kube-apiserver config configmap to something similar to:\n\n\"apiServerArguments\": {\n ...\n   \"client-ca-file\": [\n     \"/etc/kubernetes/static-pod-certs/configmaps/client-ca/ca-bundle.crt\"\n   ],\n ..."
+        },
+        {
+          "id": "ocp4-api-server-encryption-provider-cipher",
+          "title": "Configure the Encryption Provider Cipher",
+          "description": "When you enable etcd encryption, the following OpenShift API server and Kubernetes API server resources are encrypted:\n\n* Secrets\n* ConfigMaps\n* Routes\n* OAuth access tokens\n* OAuth authorize tokens\n\nWhen you enable etcd encryption, encryption keys are created. These keys are rotated on a weekly basis. You must have these keys in order to restore from an etcd backup.\n\nTo ensure the correct cipher, set the encryption type to aescbc or aesgcm in the apiserver object which configures the API server itself.\n\nspec:\n encryption:\n   type: aescbc\n\nFor more information, follow the relevant documentation ( https://docs.openshift.com/container-platform/latest/security/encrypting-etcd.html )."
+        },
+        {
+          "id": "ocp4-api-server-etcd-ca",
+          "title": "Configure the etcd Certificate Authority for the API Server",
+          "description": "To ensure etcd is configured to make use of TLS encryption for client connections, follow the OpenShift documentation and setup the TLS connection between the API Server and etcd. Then, verify that apiServerArguments has the etcd-cafile configured in the openshift-kube-apiserver config configmap to something similar to:\n\n\"apiServerArguments\": {\n ...\n   \"etcd-cafile\": [\n       \"/etc/kubernetes/static-pod-resources/configmaps/etcd-serving-ca/ca-bundle.crt\"\n   ],\n ..."
+        },
+        {
+          "id": "ocp4-api-server-etcd-cert",
+          "title": "Configure the etcd Certificate for the API Server",
+          "description": "To ensure etcd is configured to make use of TLS encryption for client communications, follow the OpenShift documentation and setup the TLS connection between the API Server and etcd. Then, verify that apiServerArguments has the etcd-certfile configured in the openshift-kube-apiserver configmap to something similar to:\n\n...\n\"etcd-certfile\": [\n   \"/etc/kubernetes/static-pod-resources/secrets/etcd-client/tls.crt\"\n],\n..."
+        },
+        {
+          "id": "ocp4-api-server-etcd-key",
+          "title": "Configure the etcd Certificate Key for the API Server",
+          "description": "To ensure etcd is configured to make use of TLS encryption for client communications, follow the OpenShift documentation and setup the TLS connection between the API Server and etcd. Then, verify that apiServerArguments has the etcd-keyfile configured in the openshift-kube-apiserver configmap to something similar to:\n\n...\n\"etcd-keyfile\": [\n   \"/etc/kubernetes/static-pod-resources/secrets/etcd-client/tls.key\"\n],\n..."
+        },
+        {
+          "id": "ocp4-api-server-https-for-kubelet-conn",
+          "title": "Ensure that the --kubelet-https argument is set to true",
+          "description": "The kube-apiserver ensures https to the kubelet by default. The apiserver flag \"--kubelet-https\" is deprecated and should be either set to \"true\" or omitted from the argument list."
+        },
+        {
+          "id": "ocp4-api-server-insecure-bind-address",
+          "title": "Disable Use of the Insecure Bind Address",
+          "description": "OpenShift should not bind to non-loopback insecure addresses. Edit the openshift-kube-apiserver configmap and remove the insecure-bind-address if it exists:\n\n\"apiServerArguments\":{\n ...\n \"insecure-bind-address\":[\n   \"127.0.0.1\"\n ],\n ..."
+        },
+        {
+          "id": "ocp4-api-server-kube-no-unsupported-config-overrides",
+          "title": "Ensure No Unsupported Configuration Overrides are Used",
+          "description": "Kubernetes API servers should not use unsupported configuration overrides that can potentially compromise the security and stability of the cluster. This rule checks that no unsupported configuration overrides are present in the cluster API server configurations."
+        },
+        {
+          "id": "ocp4-api-server-kubelet-certificate-authority",
+          "title": "Configure the kubelet Certificate Authority for the API Server",
+          "description": "To ensure OpenShift verifies kubelet certificates before establishing connections, follow the OpenShift documentation and setup the TLS connection between the API Server and kubelets. Edit the openshift-kube-apiserver configmap and set the below parameter if it is not already configured:\n\n\"apiServerArguments\":{\n ...\n \"kubelet-certificate-authority\":\"/etc/kubernetes/static-pod-resources/configmaps/kubelet-serving-ca/ca-bundle.crt\",\n ..."
+        },
+        {
+          "id": "ocp4-api-server-kubelet-client-cert",
+          "title": "Configure the kubelet Certificate File for the API Server",
+          "description": "To enable certificate based kubelet authentication, edit the config configmap in the openshift-kube-apiserver namespace and set the below parameter in the config.yaml key if it is not already configured:\n\n\"apiServerArguments\":{\n...\n \"kubelet-client-certificate\":\"/etc/kubernetes/static-pod-resources/secrets/kubelet-client/tls.crt\",\n...\n}"
+        },
+        {
+          "id": "ocp4-api-server-kubelet-client-key",
+          "title": "Configure the kubelet Certificate Key for the API Server",
+          "description": "To enable certificate based kubelet authentication, edit the config configmap in the openshift-kube-apiserver namespace and set the below parameter in the config.yaml key if it is not already configured:\n\n\"apiServerArguments\":{\n...\n \"kubelet-client-key\":\"/etc/kubernetes/static-pod-resources/secrets/kubelet-client/tls.key\",\n...\n}"
+        },
+        {
+          "id": "ocp4-api-server-no-unsupported-config-overrides",
+          "title": "Ensure No Unsupported Configuration Overrides are Used",
+          "description": "OpenShift API servers should not use unsupported configuration overrides that can potentially compromise the security and stability of the cluster. This rule checks that no unsupported configuration overrides are present in the cluster API server configurations."
+        },
+        {
+          "id": "ocp4-api-server-oauth-https-serving-cert",
+          "title": "Ensure the openshift-oauth-apiserver service uses TLS",
+          "description": "By default, the OpenShift OAuth API Server uses TLS. HTTPS should be used for connections between openshift-oauth-apiserver and kube-apiserver. By default, the OpenShift OAuth API Server uses Intermediate profile which requires a minimum TLS version of 1.2."
+        },
+        {
+          "id": "ocp4-api-server-openshift-https-serving-cert",
+          "title": "Ensure the openshift-oauth-apiserver service uses TLS",
+          "description": "By default, the OpenShift API Server uses TLS. HTTPS should be used for connections between openshift-apiserver and kube-apiserver. By default, the OpenShift OAuth API Server uses Intermediate profile which requires a minimum TLS version of 1.2."
+        },
+        {
+          "id": "ocp4-api-server-profiling-protected-by-rbac",
+          "title": "Profiling is protected by RBAC",
+          "description": "Ensure that the cluster-debugger cluster role includes the /metrics resource URL. This demonstrates that profiling is protected by RBAC, with a specific cluster role to allow access."
+        },
+        {
+          "id": "ocp4-api-server-request-timeout",
+          "title": "Configure the API Server Minimum Request Timeout",
+          "description": "The API server minimum request timeout defines the minimum number of seconds a handler must keep a request open before timing it out. To set this, edit the openshift-kube-apiserver configmap and set min-request-timeout under the apiServerArguments field:\n\n\"apiServerArguments\":{\n ...\n \"min-request-timeout\":[\n    3600 \n ],\n ..."
+        },
+        {
+          "id": "ocp4-api-server-service-account-lookup",
+          "title": "Ensure that the service-account-lookup argument is set to true",
+          "description": "Validate service account before validating token."
+        },
+        {
+          "id": "ocp4-api-server-service-account-public-key",
+          "title": "Configure the Service Account Public Key for the API Server",
+          "description": "To ensure the API Server utilizes its own key pair, edit the openshift-kube-apiserver configmap and set the serviceAccountPublicKeyFiles parameter to the public key file for service accounts:\n\n...\n\"serviceAccountPublicKeyFiles\":[\n \"/etc/kubernetes/static-pod-resources/configmaps/sa-token-signing-certs\"\n],\n..."
+        },
+        {
+          "id": "ocp4-api-server-tls-cert",
+          "title": "Configure the Certificate for the API Server",
+          "description": "To ensure the API Server utilizes its own TLS certificates, the tls-cert-file must be configured. Verify that the apiServerArguments section has the tls-cert-file configured in the config configmap in the openshift-kube-apiserver namespace similar to:\n\n\"apiServerArguments\":{\n...\n\"tls-cert-file\": [\n \"/etc/kubernetes/static-pod-certs/secrets/service-network-serving-certkey/tls.crt\"\n],\n...\n}"
+        },
+        {
+          "id": "ocp4-api-server-tls-private-key",
+          "title": "Configure the Certificate Key for the API Server",
+          "description": "To ensure the API Server utilizes its own TLS certificates, the tls-private-key-file must be configured. Verify that the apiServerArguments section has the tls-private-key-file configured in the config configmap in the openshift-kube-apiserver namespace similar to:\n\n\"apiServerArguments\":{\n...\n\"tls-private-key-file\": [\n \"/etc/kubernetes/static-pod-certs/secrets/service-network-serving-certkey/tls.key\"\n],\n...\n}"
+        },
+        {
+          "id": "ocp4-api-server-tls-security-profile-custom-min-tls-version",
+          "title": "Ensure custom tlsSecurityProfile configured for APIServer uses secure TLS version",
+          "description": "The configuration tlsSecurityProfile specifies TLS configurations to be used while establishing connections with the externally exposed servers. Though secure transport mode is used for establishing connections, the protocols used may not always be strong enough to avoid interception and manipulation of the data in transport. When Custom TLS Security profile is used it's always better to configure TLS version 1.2 or newer to avoid any security breaches. Update minTLSVersion configured in Custom tlsSecurityProfile using the following command:\n\noc patch apiservers.config.openshift.io cluster --type 'merge' --patch '{\"spec\":{\"tlsSecurityProfile\":{\"custom\":{\"minTLSVersion\":\"VersionTLS12\"}}}}'\n\nFor more information, follow OpenShift documentation: the relevant documentation ( https://docs.openshift.com/container-platform/latest/security/tls-security-profiles.html )."
+        },
+        {
+          "id": "ocp4-api-server-tls-security-profile-not-old",
+          "title": "Ensure APIServer is not configured with Old tlsSecurityProfile",
+          "description": "The configuration tlsSecurityProfile specifies TLS configurations to be used while establishing connections with the externally exposed servers. Though secure transport mode is used for establishing connections, the protocols used may not always be strong enough to avoid interception and manipulation of the data in transport. TLS Security profile Old should be avoided, as it supports vulnerable protocols, ciphers, and algorithms which could lead to security breaches. Update tlsSecurityProfile from Old to Intermediate using the following command:\n\noc patch apiservers.config.openshift.io cluster --type 'json' --patch '[{\"op\": \"add\", \"path\": \"/spec/tlsSecurityProfile/intermediate\", \"value\": {}}, {\"op\": \"replace\", \"path\": \"/spec/tlsSecurityProfile/type\", \"value\": \"Intermediate\"}, {\"op\": \"remove\", \"path\": \"/spec/tlsSecurityProfile/old\"}]'\n\nFor more information, follow OpenShift documentation: the relevant documentation ( https://docs.openshift.com/container-platform/latest/security/tls-security-profiles.html )."
+        },
+        {
+          "id": "ocp4-audit-log-forwarding-enabled",
+          "title": "Ensure that Audit Log Forwarding Is Enabled",
+          "description": "OpenShift audit works at the API server level, logging all requests coming to the server. Audit is on by default and the best practice is to ship audit logs off the cluster for retention. The cluster-logging-operator is able to do this with the\n\nClusterLogForwarders\n\nresource. The forementioned resource can be configured to logs to different third party systems. For more information on this, please reference the official documentation: https://docs.openshift.com/container-platform/latest/observability/logging/logging-6.0/log6x-clf.html"
+        },
+        {
+          "id": "ocp4-audit-log-forwarding-webhook",
+          "title": "Ensure that Audit Log Webhook Is Configured",
+          "description": "Audit is on by default and the best practice is to ship audit logs off an cluster for retention. HyperShift is able to do this with the a audit webhook, which is configured in the HostedCluster custom resource. The forementioned resource can be configured to log to different third party systems. For more information on this, please reference the official documentation: https://hypershift-docs.netlify.app/reference/api/"
+        },
+        {
+          "id": "ocp4-audit-logging-enabled",
+          "title": "Ensure that API server audit logging is enabled",
+          "description": "OpenShift has the ability to audit API server requests. Audit provides a security-relevant chronological set of records documenting the sequence of activities that have affected system by individual users, administrators, or other components of the system. Audit works at the API server level, logging all requests coming to the server. Verify that audit logging is enabled by checking that the API server audit log configuration is not set to `None`, which explicitly disables the functionality. For more information on how to configure the audit profile, please visit the documentation ( https://docs.openshift.com/container-platform/latest/security/audit-log-policy-config.html )"
+        },
+        {
+          "id": "ocp4-audit-profile-set",
+          "title": "Ensure that the cluster's audit profile is properly set",
+          "description": "OpenShift can audit the details of requests made to the API server through the standard Kubernetes audit capabilities.\n\nIn OpenShift, auditing of the API Server is on by default. Audit provides a security-relevant chronological set of records documenting the sequence of activities that have affected system by individual users, administrators, or other components of the system. Audit works at the API server level, logging all requests coming to the server. Each audit log contains two entries:\n\nThe request line containing:\n\n* A Unique ID allowing to match the response line (see #2)\n* The source IP of the request\n* The HTTP method being invoked\n* The original user invoking the operation\n* The impersonated user for the operation (self meaning himself)\n* The impersonated group for the operation (lookup meaning user's group)\n* The namespace of the request or none\n* The URI as requested\n\nThe response line containing:\n\n* The aforementioned unique ID\n* The response code\n\nFor more information on how to configure the audit profile, please visit the documentation ( https://docs.openshift.com/container-platform/latest/security/audit-log-policy-config.html )"
+        },
+        {
+          "id": "ocp4-configure-network-policies",
+          "title": "Ensure that the CNI in use supports Network Policies",
+          "description": "There are a variety of CNI plugins available for Kubernetes. If the CNI in use does not support Network Policies it may not be possible to effectively restrict traffic in the cluster. OpenShift supports Kubernetes NetworkPolicy using a Kubernetes Container Network Interface (CNI) plug-in."
+        },
+        {
+          "id": "ocp4-configure-network-policies-hypershift-hosted",
+          "title": "Ensure that HyperShift Hosted Namespaces have Network Policies defined.",
+          "description": "Use network policies to isolate traffic in your cluster network."
+        },
+        {
+          "id": "ocp4-configure-network-policies-namespaces",
+          "title": "Ensure that application Namespaces have Network Policies defined.",
+          "description": "Use network policies to isolate traffic in your cluster network."
+        },
+        {
+          "id": "ocp4-controller-service-account-ca",
+          "title": "Configure the Service Account Certificate Authority Key for the Controller Manager",
+          "description": "To ensure the API Server utilizes its own key pair, set the masterCA parameter to the public key file for service accounts in the openshift-kube-controller-manager configmap on the master node(s):\n\n\"extendedArguments\": {\n...\n \"root-ca-file\": [\n   \"/etc/kubernetes/static-pod-resources/configmaps/serviceaccount-ca/ca-bundle.crt\"\n ],\n..."
+        },
+        {
+          "id": "ocp4-controller-service-account-private-key",
+          "title": "Configure the Service Account Private Key for the Controller Manager",
+          "description": "To ensure the API Server utilizes its own key pair, set the privateKeyFile parameter to the public key file for service accounts in the openshift-kube-controller-manager configmap on the master node(s):\n\n\"extendedArguments\": {\n...\n \"service-account-private-key-file\": [\n   \"/etc/kubernetes/static-pod-resources/secrets/service-account-private-key/service-account.key\"\n ],\n..."
+        },
+        {
+          "id": "ocp4-controller-use-service-account",
+          "title": "Ensure that use-service-account-credentials is enabled",
+          "description": "To ensure individual service account credentials are used, set the use-service-account-credentials option to true in the openshift-kube-controller-manager configmap on the master node(s):\n\n\"extendedArguments\": {\n...\n \"use-service-account-credentials\": [\n   \"true\"\n ],\n..."
+        },
+        {
+          "id": "ocp4-etcd-auto-tls",
+          "title": "Disable etcd Self-Signed Certificates",
+          "description": "To ensure the etcd service is not using self-signed certificates, run the following command:\n\n$ oc get cm/etcd-pod -n openshift-etcd -o yaml\n\nThe etcd pod configuration contained in the configmap should not contain the --auto-tls=true flag."
+        },
+        {
+          "id": "ocp4-etcd-cert-file",
+          "title": "Ensure That The etcd Client Certificate Is Correctly Set",
+          "description": "To ensure the etcd service is serving TLS to clients, make sure the etcd-pod* ConfigMaps in the openshift-etcd namespace contain the following argument for the etcd binary in the etcd pod:\n\n--cert-file=/etc/kubernetes/static-pod-certs/secrets/etcd-all-[a-z]+/etcd-serving-NODE_NAME.crt\n\n. Note that the\n\n[a-z]+\n\nis being used since the directory might change between OpenShift versions."
+        },
+        {
+          "id": "ocp4-etcd-client-cert-auth",
+          "title": "Enable The Client Certificate Authentication",
+          "description": "To ensure the etcd service is serving TLS to clients, make sure the etcd-pod* ConfigMaps in the openshift-etcd namespace contain the following argument for the etcd binary in the etcd pod:\n\noc get -nopenshift-etcd cm etcd-pod -oyaml | grep \"\\-\\-client-cert-auth=\"\n\nthe parameter should be set to true."
+        },
+        {
+          "id": "ocp4-etcd-key-file",
+          "title": "Ensure That The etcd Key File Is Correctly Set",
+          "description": "To ensure the etcd service is serving TLS to clients, make sure the etcd-pod* ConfigMaps in the openshift-etcd namespace contain the following argument for the etcd binary in the etcd pod:\n\noc get -nopenshift-etcd cm etcd-pod -oyaml | grep \"\\-\\-key-file=/etc/kubernetes/static-pod-certs/secrets/etcd-all-[a-z]+/etcd-serving-NODE_NAME.key\"\n\n. Note that the\n\n[a-z]+\n\nis being used since the directory might change between OpenShift versions."
+        },
+        {
+          "id": "ocp4-etcd-peer-auto-tls",
+          "title": "Disable etcd Peer Self-Signed Certificates",
+          "description": "To ensure the etcd service is not using self-signed certificates, run the following command:\n\n$ oc get cm/etcd-pod -n openshift-etcd -o yaml\n\nThe etcd pod configuration contained in the configmap should not contain the --peer-auto-tls=true flag."
+        },
+        {
+          "id": "ocp4-etcd-peer-cert-file",
+          "title": "Ensure That The etcd Peer Client Certificate Is Correctly Set",
+          "description": "To ensure the etcd service is serving TLS to peers, make sure the etcd-pod* ConfigMaps in the openshift-etcd namespace contain the following argument for the etcd binary in the etcd pod:\n\n--peer-cert-file=/etc/kubernetes/static-pod-certs/secrets/etcd-all-[a-z]+/etcd-peer-NODE_NAME.crt\n\nNote that the\n\n[a-z]+\n\nis being used since the directory might change between OpenShift versions."
+        },
+        {
+          "id": "ocp4-etcd-peer-client-cert-auth",
+          "title": "Enable The Peer Client Certificate Authentication",
+          "description": "To ensure the etcd service is serving TLS to clients, make sure the etcd-pod* ConfigMaps in the openshift-etcd namespace contain the following argument for the etcd binary in the etcd pod:\n\noc get -nopenshift-etcd cm etcd-pod -oyaml | grep \"\\-\\-peer-client-cert-auth=\"\n\nthe parameter should be set to true."
+        },
+        {
+          "id": "ocp4-etcd-peer-key-file",
+          "title": "Ensure That The etcd Peer Key File Is Correctly Set",
+          "description": "To ensure the etcd service is serving TLS to peers, make sure the etcd-pod* ConfigMaps in the openshift-etcd namespace contain the following argument for the etcd binary in the etcd pod:\n\noc get -nopenshift-etcd cm etcd-pod -oyaml | grep \"\\-\\-peer-key-file=/etc/kubernetes/static-pod-certs/secrets/etcd-all-[a-z]+/etcd-peer-NODE_NAME.key\"\n\nNote that the\n\n[a-z]+\n\nis being used since the directory might change between OpenShift versions."
+        },
+        {
+          "id": "ocp4-file-groupowner-proxy-kubeconfig",
+          "title": "Verify Group Who Owns The Worker Proxy Kubeconfig File",
+          "description": "To ensure the Kubernetes ConfigMap is mounted into the sdn daemonset pods with the correct ownership, make sure that the sdn-config ConfigMap is mounted using a ConfigMap at the /config mount point and that the sdn container points to that configuration using the --proxy-config command line option. Run:\n\noc get -nopenshift-sdn ds sdn -ojson | jq -r '.spec.template.spec.containers[] | select(.name == \"sdn\")'\n\nand ensure the --proxy-config parameter points to /config/kube-proxy-config.yaml and that the config mount point is mounted from the sdn-config ConfigMap."
+        },
+        {
+          "id": "ocp4-file-owner-proxy-kubeconfig",
+          "title": "Verify User Who Owns The Worker Proxy Kubeconfig File",
+          "description": "To ensure the Kubernetes ConfigMap is mounted into the sdn daemonset pods with the correct ownership, make sure that the sdn-config ConfigMap is mounted using a ConfigMap at the /config mount point and that the sdn container points to that configuration using the --proxy-config command line option. Run:\n\noc get -nopenshift-sdn ds sdn -ojson | jq -r '.spec.template.spec.containers[] | select(.name == \"sdn\")'\n\nand ensure the --proxy-config parameter points to /config/kube-proxy-config.yaml and that the config mount point is mounted from the sdn-config ConfigMap."
+        },
+        {
+          "id": "ocp4-file-permissions-proxy-kubeconfig",
+          "title": "Verify Permissions on the Worker Proxy Kubeconfig File",
+          "description": "To ensure the Kubernetes ConfigMap is mounted into the sdn daemonset pods with the correct permissions, make sure that the sdn-config ConfigMap is mounted using restrictive permissions. Check that the config VolumeMount mounts the sdn-config configMap with permissions set to 420:\n\n{\n\"configMap\": {\n \"defaultMode\": 420,\n \"name\": \"sdn-config\"\n },\n\"name\": \"config\"\n}"
+        },
+        {
+          "id": "ocp4-general-apply-scc",
+          "title": "Apply Security Context to Your Pods and Containers",
+          "description": "Apply Security Context to your Pods and Containers"
+        },
+        {
+          "id": "ocp4-general-default-namespace-use",
+          "title": "The default namespace should not be used",
+          "description": "Kubernetes provides a default namespace, where objects are placed if no namespace is specified for them. Placing objects in this namespace makes application of RBAC and other controls more difficult."
+        },
+        {
+          "id": "ocp4-general-default-seccomp-profile",
+          "title": "Ensure Seccomp Profile Pod Definitions",
+          "description": "Enable default seccomp profiles in your pod definitions."
+        },
+        {
+          "id": "ocp4-general-namespaces-in-use",
+          "title": "Create administrative boundaries between resources using namespaces",
+          "description": "Use namespaces to isolate your Kubernetes objects."
+        },
+        {
+          "id": "ocp4-idp-is-configured",
+          "title": "Configure An Identity Provider",
+          "description": "For users to interact with OpenShift Container Platform, they must first authenticate to the cluster. The authentication layer identifies the user associated with requests to the OpenShift Container Platform API. The authorization layer then uses information about the requesting user to determine if the request is allowed. Understanding authentication | Authentication | OpenShift Container Platform ( https://docs.openshift.com/container-platform/4.6/logging/cluster-logging-external.html )\n\nThe OpenShift Container Platform includes a built-in OAuth server for token-based authentication. Developers and administrators obtain OAuth access tokens to authenticate themselves to the API. It is recommended for an administrator to configure OAuth to specify an identity provider after the cluster is installed. User access to the cluster is managed through the identity provider. Understanding identity provider configuration | Authentication | OpenShift Container Platform ( https://docs.openshift.com/container-platform/4.6/authentication/understanding-identity-provider.html )\n\nOpenShift includes built-in role based access control (RBAC) to determine whether a user is allowed to perform a given action within the cluster. Roles can have cluster scope or local (i.e. project) scope. Using RBAC to define and apply permissions | Authentication | OpenShift Container Platform ( https://docs.openshift.com/container-platform/4.6/authentication/using-rbac.html )"
+        },
+        {
+          "id": "ocp4-ingress-controller-tls-cipher-suites",
+          "title": "Ensure that the Ingress Controller only makes use of Strong Cryptographic Ciphers",
+          "description": "Ensure that the Ingress Controller is configured to only use strong cryptographic ciphers."
+        },
+        {
+          "id": "ocp4-kubeadmin-removed",
+          "title": "Ensure that the kubeadmin secret has been removed",
+          "description": "The kubeadmin user is meant to be a temporary user used for bootstrapping purposes. It is preferable to assign system administrators whose users are backed by an Identity Provider.\n\nMake sure to remove the user as described in the documentation ( https://docs.openshift.com/container-platform/latest/authentication/remove-kubeadmin.html )"
+        },
+        {
+          "id": "ocp4-kubelet-configure-tls-cert",
+          "title": "Ensure That The kubelet Client Certificate Is Correctly Set",
+          "description": "To ensure the kubelet TLS client certificate is configured, edit the kubelet configuration file /etc/kubernetes/kubelet.conf and configure the kubelet certificate file.\n\ntlsCertFile: /path/to/TLS/cert.key"
+        },
+        {
+          "id": "ocp4-kubelet-configure-tls-key",
+          "title": "Ensure That The kubelet Server Key Is Correctly Set",
+          "description": "To ensure the kubelet TLS private server key certificate is configured, edit the kubelet configuration file /etc/kubernetes/kubelet.conf and configure the kubelet private key file.\n\ntlsPrivateKeyFile: /path/to/TLS/private.key"
+        },
+        {
+          "id": "ocp4-kubelet-disable-readonly-port",
+          "title": "kubelet - Disable the Read-Only Port",
+          "description": "To disable the read-only port, edit the kubelet configuration Edit the openshift-kube-apiserver configmap and set the kubelet-read-only-port parameter to 0:\n\n\"apiServerArguments\":{\n ...\n \"kubelet-read-only-port\":[\n   \"0\"\n ],\n ..."
+        },
+        {
+          "id": "ocp4-ocp-allowed-registries",
+          "title": "Allowed registries are configured",
+          "description": "The configuration registrySources.allowedRegistries determines the permitted registries that the OpenShift container runtime can access for builds and pods. This configuration setting ensures that all registries other than those specified are blocked. You can set the allowed repositories by applying the following manifest using\n\noc patch\n\n, e.g. if you save the following snippet to\n\n/tmp/allowed-registries-patch.yaml\n\nspec:\n registrySources:\n   allowedRegistries:\n   - my-trusted-registry.internal.example.com\n\nyou would call\n\noc patch image.config.openshift.io cluster --patch=\"$(cat /tmp/allowed-registries-patch.yaml)\" --type=merge"
+        },
+        {
+          "id": "ocp4-ocp-allowed-registries-for-import",
+          "title": "Allowed registries for import are configured",
+          "description": "The configuration allowedRegistriesForImport limits the container image registries from which normal users may import images. This is important to control, as a user who can stand up a malicious registry can then import content which claims to include the SHAs of legitimate content layers. You can set the allowed repositories for import by applying the following manifest using\n\noc patch\n\n, e.g. if you save the following snippet to\n\n/tmp/allowed-import-registries-patch.yaml\n\nspec:\n allowedRegistriesForImport:\n - domainName: my-trusted-registry.internal.example.com\n   insecure: false\n\nyou would call\n\noc patch image.config.openshift.io cluster --patch=\"$(cat /tmp/allowed-import-registries-patch.yaml)\" --type=merge"
+        },
+        {
+          "id": "ocp4-ocp-api-server-audit-log-maxbackup",
+          "title": "Configure the OpenShift API Server Maximum Retained Audit Logs",
+          "description": "To configure how many rotations of audit logs are retained, edit the openshift-apiserver configmap and set the audit-log-maxbackup parameter to 10 or to an organizationally appropriate value:\n\n\"apiServerArguments\":{\n ...\n \"audit-log-maxbackup\": [10],\n ..."
+        },
+        {
+          "id": "ocp4-ocp-api-server-audit-log-maxsize",
+          "title": "Configure OpenShift API Server Maximum Audit Log Size",
+          "description": "To rotate audit logs upon reaching a maximum size, edit the openshift-apiserver configmap and set the audit-log-maxsize parameter to an appropriate size in MB. For example, to set it to 100 MB:\n\n\"apiServerArguments\":{\n ...\n \"audit-log-maxsize\": [\"100\"],\n ..."
+        },
+        {
+          "id": "ocp4-ocp-insecure-allowed-registries-for-import",
+          "title": "Check configured allowed registries for import uses secure protocol",
+          "description": "The configuration allowedRegistriesForImport limits the container image registries from which normal users may import images. This is a list of the registries that can be trusted to contain valid images and the image location configured is assumed to be secured unless configured otherwise. It is important to allow only secure registries to avoid man in the middle attacks, as the insecure image import request can be impersonated and could lead to fetching malicious content. List all the allowed repositories for import configured with insecure set to true using the following command:\n\noc get image.config.openshift.io/cluster -o json | jq '.spec | (.allowedRegistriesForImport[])? | select(.insecure==true)'\n\nRemove or edit the listed registries having insecure set by using the command:\n\noc edit image.config.openshift.io/cluster\n\nFor more information, follow the relevant documentation ( https://docs.openshift.com/container-platform/latest/openshift_images/image-configuration.html )."
+        },
+        {
+          "id": "ocp4-ocp-insecure-registries",
+          "title": "Check if any insecure registry sources is configured",
+          "description": "The configuration registrySources.insecureRegistries determines the insecure registries that the OpenShift container runtime can access for builds and pods. This configuration setting is for accessing the configured registries without TLS validation which could lead to security breaches and should be avoided. Remove any insecureRegistries configured using the following command:\n\noc patch image.config.openshift.io cluster --type=json -p \"[{'op': 'remove', 'path': '/spec/registrySources/insecureRegistries'}]\"\n\nFor more information, follow the relevant documentation ( https://docs.openshift.com/container-platform/latest/openshift_images/image-configuration.html )."
+        },
+        {
+          "id": "ocp4-openshift-api-server-audit-log-path",
+          "title": "Configure the Audit Log Path",
+          "description": "To enable auditing on the OpenShift API Server, the audit log path must be set. Edit the openshift-apiserver configmap and set the audit-log-path to a suitable path and file where audit logs should be written. For example:\n\n\"apiServerArguments\":{\n ...\n \"audit-log-path\":\"/var/log/openshift-apiserver/audit.log\",\n ..."
+        },
+        {
+          "id": "ocp4-rbac-debug-role-protects-pprof",
+          "title": "Profiling is protected by RBAC",
+          "description": "Ensure that the cluster-debugger cluster role includes the /debug/pprof resource URL. This demonstrates that profiling is protected by RBAC, with a specific cluster role to allow access."
+        },
+        {
+          "id": "ocp4-rbac-least-privilege",
+          "title": "Ensure that the RBAC setup follows the principle of least privilege",
+          "description": "Role-based access control (RBAC) objects determine whether a user is allowed to perform a given action within a project. If users or groups exist that are bound to roles they must not have, modify the user or group permissions using the following cluster and local role binding commands: Remove a User from a Cluster RBAC role by executing the following: oc adm policy remove-cluster-role-from-user role username Remove a Group from a Cluster RBAC role by executing the following: oc adm policy remove-cluster-role-from-group role groupname Remove a User from a Local RBAC role by executing the following: oc adm policy remove-role-from-user role username Remove a Group from a Local RBAC role by executing the following: oc adm policy remove-role-from-group role groupname NOTE: For additional information. https://docs.openshift.com/container-platform/latest/authentication/using-rbac.html"
+        },
+        {
+          "id": "ocp4-rbac-limit-cluster-admin",
+          "title": "Ensure that the cluster-admin role is only used where required",
+          "description": "The RBAC role cluster-admin provides wide-ranging powers over the environment and should be used only where and when needed."
+        },
+        {
+          "id": "ocp4-rbac-limit-secrets-access",
+          "title": "Limit Access to Kubernetes Secrets",
+          "description": "The Kubernetes API stores secrets, which may be service account tokens for the Kubernetes API or credentials used by workloads in the cluster. Access to these secrets should be restricted to the smallest possible group of users to reduce the risk of privilege escalation. To restrict users from secrets, remove get , list , and watch access to unauthorized users to secret objects in the cluster."
+        },
+        {
+          "id": "ocp4-rbac-pod-creation-access",
+          "title": "Minimize Access to Pod Creation",
+          "description": "The ability to create pods in a namespace can provide a number of opportunities for privilege escalation. Where applicable, remove create access to pod objects in the cluster."
+        },
+        {
+          "id": "ocp4-rbac-wildcard-use",
+          "title": "Minimize Wildcard Usage in Cluster and Local Roles",
+          "description": "Kubernetes Cluster and Local Roles provide access to resources based on sets of objects and actions that can be taken on those objects. It is possible to set either of these using a wildcard * which matches all items. This violates the principle of least privilege and leaves a cluster in a more vulnerable state to privilege abuse."
+        },
+        {
+          "id": "ocp4-scc-drop-container-capabilities",
+          "title": "Drop Container Capabilities",
+          "description": "Containers should not enable more capabilities than needed as this opens the door for malicious use. To disable the capabilities, the appropriate Security Context Constraints (SCCs) should set all capabilities as * or a list of capabilities in requiredDropCapabilities."
+        },
+        {
+          "id": "ocp4-scc-limit-container-allowed-capabilities",
+          "title": "Limit Container Capabilities",
+          "description": "Containers should not enable more capabilites than needed as this opens the door for malicious use. To enable only the required capabilities, the appropriate Security Context Constraints (SCCs) should set capabilities as a list in allowedCapabilities.\n\nIn case an SCC outside the default allow list in the variable var-sccs-with-allowed-capabilities-regex is being flagged, create a TailoredProfile and add the additional SCC to the regular expression in the variable var-sccs-with-allowed-capabilities-regex. An example allowing an SCC named additional follows:\n\napiVersion: compliance.openshift.io/v1alpha1\nkind: TailoredProfile\nmetadata:\n name: cis-additional-scc\nspec:\n description: Allows an additional scc\n setValues:\n - name: ocp4-var-sccs-with-allowed-capabilities-regex\n   rationale: Allow our own custom SCC\n   value: ^privileged$|^hostnetwork-v2$|^restricted-v2$|^nonroot-v2$|^additional$\n extends: ocp4-cis\n title: Modified CIS allowing one more SCC\n\nFinally, reference this TailoredProfile in a ScanSettingBinding For more information on Tailoring the Compliance Operator, please consult the OpenShift documentation: https://docs.openshift.com/container-platform/latest/security/compliance_operator/co-scans/compliance-operator-tailor.html"
+        },
+        {
+          "id": "ocp4-scc-limit-ipc-namespace",
+          "title": "Limit Access to the Host IPC Namespace",
+          "description": "Containers should not be allowed access to the host's Interprocess Communication (IPC) namespace. To prevent containers from getting access to a host's IPC namespace, the appropriate Security Context Constraints (SCCs) should set allowHostIPC to false."
+        },
+        {
+          "id": "ocp4-scc-limit-net-raw-capability",
+          "title": "Limit Use of the CAP_NET_RAW",
+          "description": "Containers should not enable more capabilities than needed as this opens the door for malicious use. CAP_NET_RAW enables a container to launch a network attack on another container or cluster. To disable the CAP_NET_RAW capability, the appropriate Security Context Constraints (SCCs) should set NET_RAW in requiredDropCapabilities."
+        },
+        {
+          "id": "ocp4-scc-limit-network-namespace",
+          "title": "Limit Access to the Host Network Namespace",
+          "description": "Containers should not be allowed access to the host's network namespace. To prevent containers from getting access to a host's network namespace, the appropriate Security Context Constraints (SCCs) should set allowHostNetwork to false."
+        },
+        {
+          "id": "ocp4-scc-limit-privilege-escalation",
+          "title": "Limit Containers Ability to Escalate Privileges",
+          "description": "Containers should be limited to only the privileges required to run and should not be allowed to escalate their privileges. To prevent containers from escalating privileges, the appropriate Security Context Constraints (SCCs) should set allowPrivilegeEscalation to false."
+        },
+        {
+          "id": "ocp4-scc-limit-privileged-containers",
+          "title": "Limit Privileged Container Use",
+          "description": "Containers should be limited to only the privileges required to run. To prevent containers from running as privileged containers, the appropriate Security Context Constraints (SCCs) should set allowPrivilegedContainer to false."
+        },
+        {
+          "id": "ocp4-scc-limit-process-id-namespace",
+          "title": "Limit Access to the Host Process ID Namespace",
+          "description": "Containers should not be allowed access to the host's process ID namespace. To prevent containers from getting access to a host's process ID namespace, the appropriate Security Context Constraints (SCCs) should set allowHostPID to false."
+        },
+        {
+          "id": "ocp4-scc-limit-root-containers",
+          "title": "Limit Container Running As Root User",
+          "description": "Containers should run as a random non-privileged user. To prevent containers from running as root user, the appropriate Security Context Constraints (SCCs) should set.runAsUser.type to MustRunAsRange."
+        },
+        {
+          "id": "ocp4-scheduler-profiling-protected-by-rbac",
+          "title": "Verify that the scheduler API service is protected by RBAC",
+          "description": "Do not bind the scheduler service to non-loopback insecure addresses."
+        },
+        {
+          "id": "ocp4-scheduler-service-protected-by-rbac",
+          "title": "Verify that the scheduler API service is protected by RBAC",
+          "description": "Do not bind the scheduler service to non-loopback insecure addresses."
+        },
+        {
+          "id": "ocp4-secrets-consider-external-storage",
+          "title": "Consider external secret storage",
+          "description": "Consider the use of an external secrets storage and management system, instead of using Kubernetes Secrets directly, if you have more complex secret management needs. Ensure the solution requires authentication to access secrets, has auditing of access to and use of secrets, and encrypts secrets. Some solutions also make it easier to rotate secrets."
+        },
+        {
+          "id": "ocp4-secrets-no-environment-variables",
+          "title": "Do Not Use Environment Variables with Secrets",
+          "description": "Secrets should be mounted as data volumes instead of environment variables."
+        },
+        {
+          "id": "ocp4-version-detect-in-hypershift",
+          "title": "This is a helper rule to fetch the required api resource for detecting HyperShift OCP version",
+          "description": "no description"
+        },
+        {
+          "id": "ocp4-version-detect-in-ocp",
+          "title": "This is a helper rule to fetch the required api resource for detecting OCP version",
+          "description": "no description"
+        }
+      ]
+    },
+    {
+      "profile": "ocp4-cis-node",
+      "rules": [
+        {
+          "id": "ocp4-etcd-unique-ca",
+          "title": "Configure A Unique CA Certificate for etcd",
+          "description": "A unique CA certificate should be created for etcd. OpenShift by default creates separate PKIs for etcd and the Kubernetes API server. The same is done for other points of communication in the cluster."
+        },
+        {
+          "id": "ocp4-file-groupowner-cni-conf",
+          "title": "Verify Group Who Owns The OpenShift Container Network Interface Files",
+          "description": "To properly set the group owner of /etc/cni/net.d/* , run the command:\n\n$ sudo chgrp root /etc/cni/net.d/*"
+        },
+        {
+          "id": "ocp4-file-groupowner-controller-manager-kubeconfig",
+          "title": "Verify Group Who Owns The OpenShift Controller Manager Kubeconfig File",
+          "description": "To properly set the group owner of /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/configmaps/controller-manager-kubeconfig/kubeconfig , run the command:\n\n$ sudo chgrp root /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/configmaps/controller-manager-kubeconfig/kubeconfig"
+        },
+        {
+          "id": "ocp4-file-groupowner-etcd-data-dir",
+          "title": "Verify Group Who Owns The Etcd Database Directory",
+          "description": "To properly set the group owner of /var/lib/etcd/member/ , run the command:\n\n$ sudo chgrp root /var/lib/etcd/member/"
+        },
+        {
+          "id": "ocp4-file-groupowner-etcd-data-files",
+          "title": "Verify Group Who Owns The Etcd Write-Ahead-Log Files",
+          "description": "To properly set the group owner of /var/lib/etcd/member/wal/* , run the command:\n\n$ sudo chgrp root /var/lib/etcd/member/wal/*"
+        },
+        {
+          "id": "ocp4-file-groupowner-etcd-member",
+          "title": "Verify Group Who Owns The etcd Member Pod Specification File",
+          "description": "To properly set the group owner of /etc/kubernetes/manifests/etcd-pod.yaml , run the command:\n\n$ sudo chgrp root /etc/kubernetes/manifests/etcd-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-groupowner-etcd-pki-cert-files",
+          "title": "Verify Group Who Owns The Etcd PKI Certificate Files",
+          "description": "To properly set the group owner of /etc/kubernetes/static-pod-resources/*/*/*/*.crt , run the command:\n\n$ sudo chgrp root /etc/kubernetes/static-pod-resources/*/*/*/*.crt"
+        },
+        {
+          "id": "ocp4-file-groupowner-ip-allocations",
+          "title": "Verify Group Who Owns The OpenShift SDN Container Network Interface Plugin IP Address Allocations",
+          "description": "To properly set the group owner of /var/lib/cni/networks/openshift-sdn/.* , run the command:\n\n$ sudo chgrp root /var/lib/cni/networks/openshift-sdn/.*"
+        },
+        {
+          "id": "ocp4-file-groupowner-kube-apiserver",
+          "title": "Verify Group Who Owns The Kubernetes API Server Pod Specification File",
+          "description": "To properly set the group owner of /etc/kubernetes/static-pod-resources/kube-apiserver-pod-*/kube-apiserver-pod.yaml , run the command:\n\n$ sudo chgrp root /etc/kubernetes/static-pod-resources/kube-apiserver-pod-*/kube-apiserver-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-groupowner-kube-controller-manager",
+          "title": "Verify Group Who Owns The Kubernetes Controller Manager Pod Specification File",
+          "description": "To properly set the group owner of /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/kube-controller-manager-pod.yaml , run the command:\n\n$ sudo chgrp root /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/kube-controller-manager-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-groupowner-kube-scheduler",
+          "title": "Verify Group Who Owns The Kubernetes Scheduler Pod Specification File",
+          "description": "To properly set the group owner of /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/kube-scheduler-pod.yaml , run the command:\n\n$ sudo chgrp root /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/kube-scheduler-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-groupowner-kubelet-conf",
+          "title": "Verify Group Who Owns The Kubelet Configuration File",
+          "description": "To properly set the group owner of /etc/kubernetes/kubelet.conf , run the command:\n\n$ sudo chgrp root /etc/kubernetes/kubelet.conf"
+        },
+        {
+          "id": "ocp4-file-groupowner-master-admin-kubeconfigs",
+          "title": "Verify Group Who Owns The OpenShift Admin Kubeconfig Files",
+          "description": "To properly set the group owner of /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/*.kubeconfig , run the command:\n\n$ sudo chgrp root /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/*.kubeconfig"
+        },
+        {
+          "id": "ocp4-file-groupowner-multus-conf",
+          "title": "Verify Group Who Owns The OpenShift Multus Container Network Interface Plugin Files",
+          "description": "To properly set the group owner of /var/run/multus/cni/net.d/* , run the command:\n\n$ sudo chgrp root /var/run/multus/cni/net.d/*"
+        },
+        {
+          "id": "ocp4-file-groupowner-openshift-pki-cert-files",
+          "title": "Verify Group Who Owns The OpenShift PKI Certificate Files",
+          "description": "To properly set the group owner of /etc/kubernetes/static-pod-resources/*/*/*/tls.crt , run the command:\n\n$ sudo chgrp root /etc/kubernetes/static-pod-resources/*/*/*/tls.crt"
+        },
+        {
+          "id": "ocp4-file-groupowner-openshift-pki-key-files",
+          "title": "Verify Group Who Owns The OpenShift PKI Private Key Files",
+          "description": "To properly set the group owner of /etc/kubernetes/static-pod-resources/*/*/*/*.key , run the command:\n\n$ sudo chgrp root /etc/kubernetes/static-pod-resources/*/*/*/*.key"
+        },
+        {
+          "id": "ocp4-file-groupowner-openshift-sdn-cniserver-config",
+          "title": "Verify Group Who Owns The OpenShift SDN CNI Server Config",
+          "description": "To properly set the group owner of /var/run/openshift-sdn/cniserver/config.json , run the command:\n\n$ sudo chgrp root /var/run/openshift-sdn/cniserver/config.json"
+        },
+        {
+          "id": "ocp4-file-groupowner-ovn-cni-server-sock",
+          "title": "Verify Group Who Owns The OVNKubernetes Socket",
+          "description": "To properly set the group owner of /run/ovn-kubernetes/cni/ovn-cni-server.sock , run the command:\n\n$ sudo chgrp root /run/ovn-kubernetes/cni/ovn-cni-server.sock"
+        },
+        {
+          "id": "ocp4-file-groupowner-ovn-db-files",
+          "title": "Verify Group Who Owns The OVNKubernetes DB files",
+          "description": "To properly set the group owner of /var/lib/ovn/etc/*.db , run the command:\n\n$ sudo chgrp root /var/lib/ovn/etc/*.db"
+        },
+        {
+          "id": "ocp4-file-groupowner-ovs-conf-db-hugetlbfs",
+          "title": "Verify Group Who Owns The Open vSwitch Configuration Database is hugetlbfs",
+          "description": "Check if the group owner of /etc/openvswitch/conf.db is hugetlbfs for x86_64."
+        },
+        {
+          "id": "ocp4-file-groupowner-ovs-conf-db-lock-hugetlbfs",
+          "title": "Verify Group Who Owns The Open vSwitch Configuration Database Lock is hugetlbfs",
+          "description": "To properly set the group owner of /etc/openvswitch/.conf.db.~lock~ , run the command:\n\n$ sudo chgrp hugetlbfs /etc/openvswitch/.conf.db.~lock~"
+        },
+        {
+          "id": "ocp4-file-groupowner-ovs-conf-db-lock-openvswitch",
+          "title": "Verify Group Who Owns The Open vSwitch Configuration Database Lock is openvswitch",
+          "description": "To properly set the group owner of /etc/openvswitch/.conf.db.~lock~ , run the command:\n\n$ sudo chgrp openvswitch /etc/openvswitch/.conf.db.~lock~"
+        },
+        {
+          "id": "ocp4-file-groupowner-ovs-conf-db-openvswitch",
+          "title": "Verify Group Who Owns The Open vSwitch Configuration Database is openvswitch",
+          "description": "Check if the group owner of /etc/openvswitch/conf.db is openvswitch for aarch64 or s390x."
+        },
+        {
+          "id": "ocp4-file-groupowner-ovs-pid",
+          "title": "Verify Group Who Owns The Open vSwitch Process ID File",
+          "description": "Ensure that the file\n\n/var/run/openvswitch/ovs-vswitchd.pid\n\n, is owned by the group\n\nopenvswitch\n\nor\n\nhugetlbfs\n\n, depending on your settings and Open vSwitch version."
+        },
+        {
+          "id": "ocp4-file-groupowner-ovs-sys-id-conf-hugetlbfs",
+          "title": "Verify Group Who Owns The Open vSwitch Persistent System ID is hugetlbfs",
+          "description": "To properly set the group owner of /etc/openvswitch/system-id.conf , run the command:\n\n$ sudo chgrp hugetlbfs /etc/openvswitch/system-id.conf"
+        },
+        {
+          "id": "ocp4-file-groupowner-ovs-sys-id-conf-openvswitch",
+          "title": "Verify Group Who Owns The Open vSwitch Persistent System ID is openvswitch",
+          "description": "To properly set the group owner of /etc/openvswitch/system-id.conf , run the command:\n\n$ sudo chgrp openvswitch /etc/openvswitch/system-id.conf"
+        },
+        {
+          "id": "ocp4-file-groupowner-ovs-vswitchd-pid",
+          "title": "Verify Group Who Owns The Open vSwitch Daemon PID File",
+          "description": "Ensure that the file\n\n/run/openvswitch/ovs-vswitchd.pid\n\n, is owned by the group\n\nopenvswitch\n\nor\n\nhugetlbfs\n\n, depending on your settings and Open vSwitch version."
+        },
+        {
+          "id": "ocp4-file-groupowner-ovsdb-server-pid",
+          "title": "Verify Group Who Owns The Open vSwitch Database Server PID",
+          "description": "Ensure that the file\n\n/run/openvswitch/ovsdb-server.pid\n\n, is owned by the group\n\nopenvswitch\n\nor\n\nhugetlbfs\n\n, depending on your settings and Open vSwitch version."
+        },
+        {
+          "id": "ocp4-file-groupowner-scheduler-kubeconfig",
+          "title": "Verify Group Who Owns The Kubernetes Scheduler Kubeconfig File",
+          "description": "To properly set the group owner of /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/configmaps/scheduler-kubeconfig/kubeconfig , run the command:\n\n$ sudo chgrp root /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/configmaps/scheduler-kubeconfig/kubeconfig"
+        },
+        {
+          "id": "ocp4-file-groupowner-worker-ca",
+          "title": "Verify Group Who Owns the Worker Certificate Authority File",
+          "description": "To properly set the group owner of /etc/kubernetes/kubelet-ca.crt , run the command:\n\n$ sudo chgrp root /etc/kubernetes/kubelet-ca.crt"
+        },
+        {
+          "id": "ocp4-file-groupowner-worker-kubeconfig",
+          "title": "Verify Group Who Owns The Worker Kubeconfig File",
+          "description": "To properly set the group owner of /var/lib/kubelet/kubeconfig , run the command:\n\n$ sudo chgrp root /var/lib/kubelet/kubeconfig"
+        },
+        {
+          "id": "ocp4-file-groupowner-worker-service",
+          "title": "Verify Group Who Owns The OpenShift Node Service File",
+          "description": "'To properly set the group owner of /etc/systemd/system/kubelet.service , run the command:\n\n$ sudo chgrp root /etc/systemd/system/kubelet.service\n\n'"
+        },
+        {
+          "id": "ocp4-file-owner-cni-conf",
+          "title": "Verify User Who Owns The OpenShift Container Network Interface Files",
+          "description": "To properly set the owner of /etc/cni/net.d/* , run the command:\n\n$ sudo chown root /etc/cni/net.d/*"
+        },
+        {
+          "id": "ocp4-file-owner-controller-manager-kubeconfig",
+          "title": "Verify User Who Owns The OpenShift Controller Manager Kubeconfig File",
+          "description": "To properly set the owner of /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/configmaps/controller-manager-kubeconfig/kubeconfig , run the command:\n\n$ sudo chown root /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/configmaps/controller-manager-kubeconfig/kubeconfig"
+        },
+        {
+          "id": "ocp4-file-owner-etcd-data-dir",
+          "title": "Verify User Who Owns The Etcd Database Directory",
+          "description": "To properly set the owner of /var/lib/etcd/member/ , run the command:\n\n$ sudo chown root /var/lib/etcd/member/"
+        },
+        {
+          "id": "ocp4-file-owner-etcd-data-files",
+          "title": "Verify User Who Owns The Etcd Write-Ahead-Log Files",
+          "description": "To properly set the owner of /var/lib/etcd/member/wal/* , run the command:\n\n$ sudo chown root /var/lib/etcd/member/wal/*"
+        },
+        {
+          "id": "ocp4-file-owner-etcd-member",
+          "title": "Verify User Who Owns The Etcd Member Pod Specification File",
+          "description": "To properly set the owner of /etc/kubernetes/manifests/etcd-pod.yaml , run the command:\n\n$ sudo chown root /etc/kubernetes/manifests/etcd-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-owner-etcd-pki-cert-files",
+          "title": "Verify User Who Owns The Etcd PKI Certificate Files",
+          "description": "To properly set the owner of /etc/kubernetes/static-pod-resources/*/*/*/*.crt , run the command:\n\n$ sudo chown root /etc/kubernetes/static-pod-resources/*/*/*/*.crt"
+        },
+        {
+          "id": "ocp4-file-owner-ip-allocations",
+          "title": "Verify User Who Owns The OpenShift SDN Container Network Interface Plugin IP Address Allocations",
+          "description": "To properly set the owner of /var/lib/cni/networks/openshift-sdn/.* , run the command:\n\n$ sudo chown root /var/lib/cni/networks/openshift-sdn/.*"
+        },
+        {
+          "id": "ocp4-file-owner-kube-apiserver",
+          "title": "Verify User Who Owns The Kubernetes API Server Pod Specification File",
+          "description": "To properly set the owner of /etc/kubernetes/static-pod-resources/kube-apiserver-pod-*/kube-apiserver-pod.yaml , run the command:\n\n$ sudo chown root /etc/kubernetes/static-pod-resources/kube-apiserver-pod-*/kube-apiserver-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-owner-kube-controller-manager",
+          "title": "Verify User Who Owns The Kubernetes Controller Manager Pod Specification File",
+          "description": "To properly set the owner of /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/kube-controller-manager-pod.yaml , run the command:\n\n$ sudo chown root /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/kube-controller-manager-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-owner-kube-scheduler",
+          "title": "Verify User Who Owns The Kubernetes Scheduler Pod Specification File",
+          "description": "To properly set the owner of /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/kube-scheduler-pod.yaml , run the command:\n\n$ sudo chown root /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/kube-scheduler-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-owner-kubelet",
+          "title": "Verify User Who Owns The Kubelet Configuration File",
+          "description": "To properly set the owner of /var/lib/kubelet/config.json , run the command:\n\n$ sudo chown root /var/lib/kubelet/config.json"
+        },
+        {
+          "id": "ocp4-file-owner-kubelet-conf",
+          "title": "Verify User Who Owns The Kubelet Configuration File",
+          "description": "To properly set the owner of /etc/kubernetes/kubelet.conf , run the command:\n\n$ sudo chown root /etc/kubernetes/kubelet.conf"
+        },
+        {
+          "id": "ocp4-file-owner-master-admin-kubeconfigs",
+          "title": "Verify User Who Owns The OpenShift Admin Kubeconfig Files",
+          "description": "To properly set the owner of /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/*.kubeconfig , run the command:\n\n$ sudo chown root /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/*.kubeconfig"
+        },
+        {
+          "id": "ocp4-file-owner-multus-conf",
+          "title": "Verify User Who Owns The OpenShift Multus Container Network Interface Plugin Files",
+          "description": "To properly set the owner of /var/run/multus/cni/net.d/* , run the command:\n\n$ sudo chown root /var/run/multus/cni/net.d/*"
+        },
+        {
+          "id": "ocp4-file-owner-openshift-pki-cert-files",
+          "title": "Verify User Who Owns The OpenShift PKI Certificate Files",
+          "description": "To properly set the owner of /etc/kubernetes/static-pod-resources/*/*/*/tls.crt , run the command:\n\n$ sudo chown root /etc/kubernetes/static-pod-resources/*/*/*/tls.crt"
+        },
+        {
+          "id": "ocp4-file-owner-openshift-pki-key-files",
+          "title": "Verify User Who Owns The OpenShift PKI Private Key Files",
+          "description": "To properly set the owner of /etc/kubernetes/static-pod-resources/*/*/*/*.key , run the command:\n\n$ sudo chown root /etc/kubernetes/static-pod-resources/*/*/*/*.key"
+        },
+        {
+          "id": "ocp4-file-owner-openshift-sdn-cniserver-config",
+          "title": "Verify User Who Owns The OpenShift SDN CNI Server Config",
+          "description": "To properly set the owner of /var/run/openshift-sdn/cniserver/config.json , run the command:\n\n$ sudo chown root /var/run/openshift-sdn/cniserver/config.json"
+        },
+        {
+          "id": "ocp4-file-owner-ovn-cni-server-sock",
+          "title": "Verify User Who Owns The OVNKubernetes Socket",
+          "description": "To properly set the owner of /run/ovn-kubernetes/cni/ovn-cni-server.sock , run the command:\n\n$ sudo chown root /run/ovn-kubernetes/cni/ovn-cni-server.sock"
+        },
+        {
+          "id": "ocp4-file-owner-ovn-db-files",
+          "title": "Verify Who Owns The OVNKubernetes DB files",
+          "description": "To properly set the owner of /var/lib/ovn/etc/*.db , run the command:\n\n$ sudo chown root /var/lib/ovn/etc/*.db"
+        },
+        {
+          "id": "ocp4-file-owner-ovs-conf-db",
+          "title": "Verify User Who Owns The Open vSwitch Configuration Database",
+          "description": "To properly set the owner of /etc/openvswitch/conf.db , run the command:\n\n$ sudo chown openvswitch /etc/openvswitch/conf.db"
+        },
+        {
+          "id": "ocp4-file-owner-ovs-conf-db-lock",
+          "title": "Verify User Who Owns The Open vSwitch Configuration Database Lock",
+          "description": "To properly set the owner of /etc/openvswitch/.conf.db.~lock~ , run the command:\n\n$ sudo chown openvswitch /etc/openvswitch/.conf.db.~lock~"
+        },
+        {
+          "id": "ocp4-file-owner-ovs-pid",
+          "title": "Verify User Who Owns The Open vSwitch Process ID File",
+          "description": "To properly set the owner of /var/run/openvswitch/ovs-vswitchd.pid , run the command:\n\n$ sudo chown openvswitch /var/run/openvswitch/ovs-vswitchd.pid"
+        },
+        {
+          "id": "ocp4-file-owner-ovs-sys-id-conf",
+          "title": "Verify User Who Owns The Open vSwitch Persistent System ID",
+          "description": "To properly set the owner of /etc/openvswitch/system-id.conf , run the command:\n\n$ sudo chown openvswitch /etc/openvswitch/system-id.conf"
+        },
+        {
+          "id": "ocp4-file-owner-ovs-vswitchd-pid",
+          "title": "Verify User Who Owns The Open vSwitch Daemon PID File",
+          "description": "To properly set the owner of /run/openvswitch/ovs-vswitchd.pid , run the command:\n\n$ sudo chown openvswitch /run/openvswitch/ovs-vswitchd.pid"
+        },
+        {
+          "id": "ocp4-file-owner-ovsdb-server-pid",
+          "title": "Verify User Who Owns The Open vSwitch Database Server PID",
+          "description": "To properly set the owner of /run/openvswitch/ovsdb-server.pid , run the command:\n\n$ sudo chown openvswitch /run/openvswitch/ovsdb-server.pid"
+        },
+        {
+          "id": "ocp4-file-owner-scheduler-kubeconfig",
+          "title": "Verify User Who Owns The Kubernetes Scheduler Kubeconfig File",
+          "description": "To properly set the owner of /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/configmaps/scheduler-kubeconfig/kubeconfig , run the command:\n\n$ sudo chown root /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/configmaps/scheduler-kubeconfig/kubeconfig"
+        },
+        {
+          "id": "ocp4-file-owner-worker-ca",
+          "title": "Verify User Who Owns the Worker Certificate Authority File",
+          "description": "To properly set the owner of /etc/kubernetes/kubelet-ca.crt , run the command:\n\n$ sudo chown root /etc/kubernetes/kubelet-ca.crt"
+        },
+        {
+          "id": "ocp4-file-owner-worker-kubeconfig",
+          "title": "Verify User Who Owns The Worker Kubeconfig File",
+          "description": "To properly set the owner of /var/lib/kubelet/kubeconfig , run the command:\n\n$ sudo chown root /var/lib/kubelet/kubeconfig"
+        },
+        {
+          "id": "ocp4-file-owner-worker-service",
+          "title": "Verify User Who Owns The OpenShift Node Service File",
+          "description": "'To properly set the owner of /etc/systemd/system/kubelet.service , run the command:\n\n$ sudo chown root /etc/systemd/system/kubelet.service \n\n'"
+        },
+        {
+          "id": "ocp4-file-permissions-cni-conf",
+          "title": "Verify Permissions on the OpenShift Container Network Interface Files",
+          "description": "To properly set the permissions of /etc/cni/net.d/* , run the command:\n\n$ sudo chmod 0600 /etc/cni/net.d/*"
+        },
+        {
+          "id": "ocp4-file-permissions-controller-manager-kubeconfig",
+          "title": "Verify Permissions on the OpenShift Controller Manager Kubeconfig File",
+          "description": "To properly set the permissions of /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/configmaps/controller-manager-kubeconfig/kubeconfig , run the command:\n\n$ sudo chmod 0600 /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/configmaps/controller-manager-kubeconfig/kubeconfig"
+        },
+        {
+          "id": "ocp4-file-permissions-etcd-data-dir",
+          "title": "Verify Permissions on the Etcd Database Directory",
+          "description": "To properly set the permissions of /var/lib/etcd , run the command:\n\n$ sudo chmod 0700 /var/lib/etcd"
+        },
+        {
+          "id": "ocp4-file-permissions-etcd-data-files",
+          "title": "Verify Permissions on the Etcd Write-Ahead-Log Files",
+          "description": "To properly set the permissions of /var/lib/etcd/member/wal/* , run the command:\n\n$ sudo chmod 0600 /var/lib/etcd/member/wal/*"
+        },
+        {
+          "id": "ocp4-file-permissions-etcd-member",
+          "title": "Verify Permissions on the Etcd Member Pod Specification File",
+          "description": "To properly set the permissions of /etc/kubernetes/manifests/etcd-pod.yaml , run the command:\n\n$ sudo chmod 0600 /etc/kubernetes/manifests/etcd-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-permissions-etcd-pki-cert-files",
+          "title": "Verify Permissions on the Etcd PKI Certificate Files",
+          "description": "To properly set the permissions of /etc/kubernetes/static-pod-resources/etcd-*/secrets/*/*.crt , run the command:\n\n$ sudo chmod 0600 /etc/kubernetes/static-pod-resources/etcd-*/secrets/*/*.crt"
+        },
+        {
+          "id": "ocp4-file-permissions-ip-allocations",
+          "title": "Verify Permissions on the OpenShift SDN Container Network Interface Plugin IP Address Allocations",
+          "description": "To properly set the permissions of /var/lib/cni/networks/openshift-sdn/* , run the command:\n\n$ sudo chmod 0644 /var/lib/cni/networks/openshift-sdn/*"
+        },
+        {
+          "id": "ocp4-file-permissions-kube-apiserver",
+          "title": "Verify Permissions on the Kubernetes API Server Pod Specification File",
+          "description": "To properly set the permissions of /etc/kubernetes/static-pod-resources/kube-apiserver-pod-*/kube-apiserver-pod.yaml , run the command:\n\n$ sudo chmod 0600 /etc/kubernetes/static-pod-resources/kube-apiserver-pod-*/kube-apiserver-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-permissions-kube-controller-manager",
+          "title": "Verify Permissions on the Kubernetes Controller Manager Pod Specification File",
+          "description": "To properly set the permissions of /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/kube-controller-manager-pod.yaml , run the command:\n\n$ sudo chmod 0600 /etc/kubernetes/static-pod-resources/kube-controller-manager-pod-*/kube-controller-manager-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-permissions-kubelet-conf",
+          "title": "Verify Permissions on The Kubelet Configuration File",
+          "description": "To properly set the permissions of /etc/kubernetes/kubelet.conf , run the command:\n\n$ sudo chmod 0644 /etc/kubernetes/kubelet.conf"
+        },
+        {
+          "id": "ocp4-file-permissions-master-admin-kubeconfigs",
+          "title": "Verify Permissions on the OpenShift Admin Kubeconfig Files",
+          "description": "To properly set the permissions of /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/*.kubeconfig , run the command:\n\n$ sudo chmod 0600 /etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/*.kubeconfig"
+        },
+        {
+          "id": "ocp4-file-permissions-multus-conf",
+          "title": "Verify Permissions on the OpenShift Multus Container Network Interface Plugin Files",
+          "description": "To properly set the permissions of /var/run/multus/cni/net.d/* , run the command:\n\n$ sudo chmod 0644 /var/run/multus/cni/net.d/*"
+        },
+        {
+          "id": "ocp4-file-permissions-openshift-pki-cert-files",
+          "title": "Verify Permissions on the OpenShift PKI Certificate Files",
+          "description": "To properly set the permissions of /etc/kubernetes/static-pod-resources/kube-*/secrets/*/tls.crt , run the command:\n\n$ sudo chmod 0600 /etc/kubernetes/static-pod-resources/kube-*/secrets/*/tls.crt"
+        },
+        {
+          "id": "ocp4-file-permissions-openshift-pki-key-files",
+          "title": "Verify Permissions on the OpenShift PKI Private Key Files",
+          "description": "To properly set the permissions of /etc/kubernetes/static-pod-resources/*/*/*/*.key , run the command:\n\n$ sudo chmod 0600 /etc/kubernetes/static-pod-resources/*/*/*/*.key"
+        },
+        {
+          "id": "ocp4-file-permissions-ovn-cni-server-sock",
+          "title": "Verify Permissions on the OVNKubernetes socket",
+          "description": "To properly set the permissions of /run/ovn-kubernetes/cni/ovn-cni-server.sock , run the command:\n\n$ sudo chmod 0600 /run/ovn-kubernetes/cni/ovn-cni-server.sock"
+        },
+        {
+          "id": "ocp4-file-permissions-ovn-db-files",
+          "title": "Verify Permissions on the OVNKubernetes DB files",
+          "description": "To properly set the permissions of /var/lib/ovn/etc/*.db , run the command:\n\n$ sudo chmod 0640 /var/lib/ovn/etc/*.db"
+        },
+        {
+          "id": "ocp4-file-permissions-ovs-conf-db",
+          "title": "Verify Permissions on the Open vSwitch Configuration Database",
+          "description": "To properly set the permissions of /etc/openvswitch/conf.db , run the command:\n\n$ sudo chmod 0640 /etc/openvswitch/conf.db"
+        },
+        {
+          "id": "ocp4-file-permissions-ovs-conf-db-lock",
+          "title": "Verify Permissions on the Open vSwitch Configuration Database Lock",
+          "description": "To properly set the permissions of /etc/openvswitch/.conf.db.~lock~ , run the command:\n\n$ sudo chmod 0600 /etc/openvswitch/.conf.db.~lock~"
+        },
+        {
+          "id": "ocp4-file-permissions-ovs-pid",
+          "title": "Verify Permissions on the Open vSwitch Process ID File",
+          "description": "To properly set the permissions of /var/run/openvswitch/ovs-vswitchd.pid , run the command:\n\n$ sudo chmod 0644 /var/run/openvswitch/ovs-vswitchd.pid"
+        },
+        {
+          "id": "ocp4-file-permissions-ovs-sys-id-conf",
+          "title": "Verify Permissions on the Open vSwitch Persistent System ID",
+          "description": "To properly set the permissions of /etc/openvswitch/system-id.conf , run the command:\n\n$ sudo chmod 0644 /etc/openvswitch/system-id.conf"
+        },
+        {
+          "id": "ocp4-file-permissions-ovs-vswitchd-pid",
+          "title": "Verify Permissions on the Open vSwitch Daemon PID File",
+          "description": "To properly set the permissions of /run/openvswitch/ovs-vswitchd.pid , run the command:\n\n$ sudo chmod 0644 /run/openvswitch/ovs-vswitchd.pid"
+        },
+        {
+          "id": "ocp4-file-permissions-ovsdb-server-pid",
+          "title": "Verify Permissions on the Open vSwitch Database Server PID",
+          "description": "To properly set the permissions of /run/openvswitch/ovsdb-server.pid , run the command:\n\n$ sudo chmod 0644 /run/openvswitch/ovsdb-server.pid"
+        },
+        {
+          "id": "ocp4-file-permissions-scheduler",
+          "title": "Verify Permissions on the Kubernetes Scheduler Pod Specification File",
+          "description": "To properly set the permissions of /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/kube-scheduler-pod.yaml , run the command:\n\n$ sudo chmod 0644 /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/kube-scheduler-pod.yaml"
+        },
+        {
+          "id": "ocp4-file-permissions-scheduler-kubeconfig",
+          "title": "Verify Permissions on the Kubernetes Scheduler Kubeconfig File",
+          "description": "To properly set the permissions of /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/configmaps/scheduler-kubeconfig/kubeconfig , run the command:\n\n$ sudo chmod 0600 /etc/kubernetes/static-pod-resources/kube-scheduler-pod-*/configmaps/scheduler-kubeconfig/kubeconfig"
+        },
+        {
+          "id": "ocp4-file-permissions-worker-ca",
+          "title": "Verify Permissions on the Worker Certificate Authority File",
+          "description": "To properly set the permissions of /etc/kubernetes/kubelet-ca.crt , run the command:\n\n$ sudo chmod 0644 /etc/kubernetes/kubelet-ca.crt"
+        },
+        {
+          "id": "ocp4-file-permissions-worker-kubeconfig",
+          "title": "Verify Permissions on the Worker Kubeconfig File",
+          "description": "To properly set the permissions of /var/lib/kubelet/kubeconfig , run the command:\n\n$ sudo chmod 0600 /var/lib/kubelet/kubeconfig"
+        },
+        {
+          "id": "ocp4-file-permissions-worker-service",
+          "title": "Verify Permissions on the OpenShift Node Service File",
+          "description": "To properly set the permissions of /etc/systemd/system/kubelet.service , run the command:\n\n$ sudo chmod 0644 /etc/systemd/system/kubelet.service"
+        },
+        {
+          "id": "ocp4-file-perms-openshift-sdn-cniserver-config",
+          "title": "Verify Permissions on the OpenShift SDN CNI Server Config",
+          "description": "To properly set the permissions of /var/run/openshift-sdn/cniserver/config.json , run the command:\n\n$ sudo chmod 0444 /var/run/openshift-sdn/cniserver/config.json"
+        },
+        {
+          "id": "ocp4-kubelet-anonymous-auth",
+          "title": "Disable Anonymous Authentication to the Kubelet",
+          "description": "By default, anonymous access to the Kubelet server is enabled. This configuration check ensures that anonymous requests to the Kubelet server are disabled. Edit the Kubelet server configuration file /etc/kubernetes/kubelet.conf on the kubelet node(s) and set the below parameter:\n\nauthentication:\n ...\n anonymous:\n   enabled: false\n ..."
+        },
+        {
+          "id": "ocp4-kubelet-authorization-mode",
+          "title": "Ensure authorization is set to Webhook",
+          "description": "Unauthenticated/unauthorized users should have no access to OpenShift nodes. The Kubelet should be set to only allow Webhook authorization. To ensure that the Kubelet requires authorization, validate that authorization is configured to Webhook in /etc/kubernetes/kubelet.conf :\n\nauthorization:\n mode: Webhook\n ..."
+        },
+        {
+          "id": "ocp4-kubelet-configure-client-ca",
+          "title": "kubelet - Configure the Client CA Certificate",
+          "description": "By default, the kubelet is not configured with a CA certificate which can subject the kubelet to man-in-the-middle attacks. To configure a client CA certificate, edit the kubelet configuration file /etc/kubernetes/kubelet.conf on the kubelet node(s) and set the below parameter:\n\nauthentication:\n...\n x509:\n   clientCAFile: /etc/kubernetes/kubelet-ca.crt\n..."
+        },
+        {
+          "id": "ocp4-kubelet-configure-event-creation",
+          "title": "Kubelet - Ensure Event Creation Is Configured",
+          "description": "Security relevant information should be captured. The eventRecordQPS Kubelet option can be used to limit the rate at which events are gathered. Setting this too low could result in relevant events not being logged, however the unlimited setting of 0 could result in a denial of service on the kubelet. Processing and storage systems should be scaled to handle the expected event load. To set the eventRecordQPS option for the kubelet, create a KubeletConfig option along these lines:\n\napiVersion: machineconfiguration.openshift.io/v1\nkind: KubeletConfig\nmetadata:\n  name: kubelet-config-$pool\nspec:\n   machineConfigPoolSelector:\n       matchLabels:\n           pools.operator.machineconfiguration.openshift.io/$pool_name: \"\"\n   kubeletConfig:\n       eventRecordQPS:  50"
+        },
+        {
+          "id": "ocp4-kubelet-configure-tls-cipher-suites",
+          "title": "Ensure that the Kubelet only makes use of Strong Cryptographic Ciphers",
+          "description": "Ensure that the Kubelet is configured to only use strong cryptographic ciphers. To set the cipher suites for the kubelet, create new or modify existing KubeletConfig object along these lines, one for every MachineConfigPool :\n\n apiVersion: machineconfiguration.openshift.io/v1\n kind: KubeletConfig\n metadata:\n    name: kubelet-config-$pool\n spec:\n     machineConfigPoolSelector:\n         matchLabels:\n             pools.operator.machineconfiguration.openshift.io/$pool_name: \"\"\n     kubeletConfig:\n       tlsCipherSuites:\n       - TLS_AES_128_GCM_SHA256\n       - TLS_AES_256_GCM_SHA384\n       - TLS_CHACHA20_POLY1305_SHA256\n       - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384\n       - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\n       - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256\n       - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256\n       - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256\n       - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256\n \n\nIn order to configure this rule to check for an alternative cipher, both var_kubelet_tls_cipher_suites_regex and var_kubelet_tls_cipher_suites have to be set"
+        },
+        {
+          "id": "ocp4-kubelet-enable-cert-rotation",
+          "title": "kubelet - Enable Certificate Rotation",
+          "description": "To enable the kubelet to rotate client certificates, edit the kubelet configuration file /etc/kubernetes/kubelet.conf on the kubelet node(s) and set the below parameter:\n\n...\nrotateCertificates: true\n..."
+        },
+        {
+          "id": "ocp4-kubelet-enable-client-cert-rotation",
+          "title": "kubelet - Enable Client Certificate Rotation",
+          "description": "To enable the kubelet to rotate client certificates, edit the kubelet configuration file /etc/kubernetes/kubelet.conf on the kubelet node(s) and set the below parameter:\n\nfeatureGates:\n...\n RotateKubeletClientCertificate: true\n..."
+        },
+        {
+          "id": "ocp4-kubelet-enable-iptables-util-chains",
+          "title": "kubelet - Allow Automatic Firewall Configuration",
+          "description": "The kubelet has the ability to automatically configure the firewall to allow the containers required ports and connections to networking resources and destinations parameters potentially creating a security incident. To allow the kubelet to modify the firewall, edit the kubelet configuration file /etc/kubernetes/kubelet.conf on the kubelet node(s) and set the below parameter:\n\nmakeIPTablesUtilChains: true"
+        },
+        {
+          "id": "ocp4-kubelet-enable-server-cert-rotation",
+          "title": "kubelet - Enable Server Certificate Rotation",
+          "description": "To enable the kubelet to rotate server certificates, edit the kubelet configuration file /etc/kubernetes/kubelet.conf on the kubelet node(s) and set the below parameter:\n\nserverTLSBootstrap: true"
+        },
+        {
+          "id": "ocp4-kubelet-enable-streaming-connections",
+          "title": "kubelet - Do Not Disable Streaming Timeouts",
+          "description": "Timouts for streaming connections should not be disabled as they help to prevent denial-of-service attacks. To configure streaming connection timeouts To set the streamingConnectionIdleTimeout option for the kubelet, create a KubeletConfig option along these lines:\n\napiVersion: machineconfiguration.openshift.io/v1\nkind: KubeletConfig\nmetadata:\n  name: kubelet-config-$pool\nspec:\n   machineConfigPoolSelector:\n       matchLabels:\n           pools.operator.machineconfiguration.openshift.io/$pool_name: \"\"\n   kubeletConfig:\n       streamingConnectionIdleTimeout:  4h0m0s"
+        },
+        {
+          "id": "ocp4-kubelet-eviction-thresholds-set-hard-imagefs-available",
+          "title": "Ensure Eviction threshold Settings Are Set - evictionHard: imagefs.available",
+          "description": "Two types of garbage collection are performed on an OpenShift Container Platform node:\n\n* Container garbage collection: Removes terminated containers.\n* Image garbage collection: Removes images not referenced by any running pods.\n\nContainer garbage collection can be performed using eviction thresholds. Image garbage collection relies on disk usage as reported by cAdvisor on the node to decide which images to remove from the node.\n\nThe OpenShift administrator can configure how OpenShift Container Platform performs garbage collection by creating a kubeletConfig object for each Machine Config Pool using any combination of the following:\n\n* soft eviction for containers\n* hard eviction for containers\n* eviction for images\n\nTo configure, follow the directions in the documentation ( https://docs.openshift.com/container-platform/latest/nodes/nodes/nodes-nodes-garbage-collection.html#nodes-nodes-garbage-collection-configuring_nodes-nodes-configuring )\n\nThis rule pertains to the imagefs.available setting of the evictionHard section. Remediation will set field imagefs.available to 15% based on the variable var_kubelet_evictionhard_imagefs_available."
+        },
+        {
+          "id": "ocp4-kubelet-eviction-thresholds-set-hard-memory-available",
+          "title": "Ensure Eviction threshold Settings Are Set - evictionHard: memory.available",
+          "description": "Two types of garbage collection are performed on an OpenShift Container Platform node:\n\n* Container garbage collection: Removes terminated containers.\n* Image garbage collection: Removes images not referenced by any running pods.\n\nContainer garbage collection can be performed using eviction thresholds. Image garbage collection relies on disk usage as reported by cAdvisor on the node to decide which images to remove from the node.\n\nThe OpenShift administrator can configure how OpenShift Container Platform performs garbage collection by creating a kubeletConfig object for each Machine Config Pool using any combination of the following:\n\n* soft eviction for containers\n* hard eviction for containers\n* eviction for images\n\nTo configure, follow the directions in the documentation ( https://docs.openshift.com/container-platform/latest/nodes/nodes/nodes-nodes-garbage-collection.html#nodes-nodes-garbage-collection-configuring_nodes-nodes-configuring )\n\nThis rule pertains to the memory.available setting of the evictionHard section. Remediation will set field memory.available to 100Mi based on the variable var_kubelet_evictionhard_memory_available."
+        },
+        {
+          "id": "ocp4-kubelet-eviction-thresholds-set-hard-nodefs-available",
+          "title": "Ensure Eviction threshold Settings Are Set - evictionHard: nodefs.available",
+          "description": "Two types of garbage collection are performed on an OpenShift Container Platform node:\n\n* Container garbage collection: Removes terminated containers.\n* Image garbage collection: Removes images not referenced by any running pods.\n\nContainer garbage collection can be performed using eviction thresholds. Image garbage collection relies on disk usage as reported by cAdvisor on the node to decide which images to remove from the node.\n\nThe OpenShift administrator can configure how OpenShift Container Platform performs garbage collection by creating a kubeletConfig object for each Machine Config Pool using any combination of the following:\n\n* soft eviction for containers\n* hard eviction for containers\n* eviction for images\n\nTo configure, follow the directions in the documentation ( https://docs.openshift.com/container-platform/latest/nodes/nodes/nodes-nodes-garbage-collection.html#nodes-nodes-garbage-collection-configuring_nodes-nodes-configuring )\n\nThis rule pertains to the nodefs.available setting of the evictionHard section. Remediation will set field nodefs.available to 10% based on the variable var_kubelet_evictionhard_nodefs_available."
+        },
+        {
+          "id": "ocp4-kubelet-eviction-thresholds-set-hard-nodefs-inodesfree",
+          "title": "Ensure Eviction threshold Settings Are Set - evictionHard: nodefs.inodesFree",
+          "description": "Two types of garbage collection are performed on an OpenShift Container Platform node:\n\n* Container garbage collection: Removes terminated containers.\n* Image garbage collection: Removes images not referenced by any running pods.\n\nContainer garbage collection can be performed using eviction thresholds. Image garbage collection relies on disk usage as reported by cAdvisor on the node to decide which images to remove from the node.\n\nThe OpenShift administrator can configure how OpenShift Container Platform performs garbage collection by creating a kubeletConfig object for each Machine Config Pool using any combination of the following:\n\n* soft eviction for containers\n* hard eviction for containers\n* eviction for images\n\nTo configure, follow the directions in the documentation ( https://docs.openshift.com/container-platform/latest/nodes/nodes/nodes-nodes-garbage-collection.html#nodes-nodes-garbage-collection-configuring_nodes-nodes-configuring )\n\nThis rule pertains to the nodefs.inodesFree setting of the evictionHard section. Remediation will set field nodefs.inodesFree to 5% based on the variable var_kubelet_evictionhard_nodefs_inodesfree."
+        }
+      ]
+    }
+  ]
+}

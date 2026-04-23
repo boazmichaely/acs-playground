@@ -326,6 +326,26 @@ HTML_SHELL = """<!DOCTYPE html>
       margin-top: 0.4rem;
       max-height: 20rem;
       overflow: auto;
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }}
+    details.rules-details table.data-grid {{
+      width: 100%;
+      min-width: 100%;
+      max-width: none;
+    }}
+    details.rules-details .data-grid thead tr.filters th,
+    details.rules-details .data-grid thead tr.headers th {{
+      padding: 0.5rem 0.35rem 0.35rem;
+    }}
+    details.rules-details .data-grid thead tr.headers th {{
+      padding: 0.45rem 1.75rem 0.45rem 0.5rem;
+    }}
+    details.rules-details .data-grid tbody td {{
+      padding: 0.45rem 0.5rem;
+      font-size: 0.84rem;
+      vertical-align: middle;
     }}
     .rule-detail-box {{
       margin-top: 0.6rem;
@@ -334,9 +354,57 @@ HTML_SHELL = """<!DOCTYPE html>
       border-radius: 6px;
       background: #fff;
     }}
-    .rule-detail-title {{ font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem; }}
     .rule-detail-meta {{ font-size: 0.75rem; color: #71717a; margin-bottom: 0.45rem; }}
-    .rule-detail-body {{ font-size: 0.8rem; color: #3f3f46; line-height: 1.45; white-space: pre-wrap; }}
+    .rule-detail-body {{
+      font-size: 0.8rem;
+      color: #3f3f46;
+      line-height: 1.45;
+      white-space: normal;
+    }}
+    .rule-desc-para {{ white-space: pre-wrap; margin: 0.35rem 0; }}
+    .rule-desc-list {{
+      margin: 0.35rem 0 0.35rem 1.1rem;
+      padding-left: 0.4rem;
+      list-style: decimal;
+    }}
+    .rule-desc-list li {{ margin: 0.3rem 0; white-space: pre-wrap; }}
+    .rule-detail-body a.rule-uri {{
+      color: #2563eb;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      word-break: break-all;
+    }}
+    .rule-detail-body a.rule-uri:hover {{ color: #1d4ed8; }}
+    .rule-detail-body code.rule-path {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78em;
+      background: #f4f4f5;
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      word-break: break-all;
+    }}
+    .rule-detail-body pre.rule-block {{
+      margin: 0.45rem 0;
+      padding: 0.5rem 0.6rem;
+      background: #18181b;
+      color: #e4e4e7;
+      border-radius: 6px;
+      overflow: auto;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      white-space: pre;
+      tab-size: 2;
+    }}
+    .rule-detail-body pre.rule-block code {{
+      font-family: inherit;
+      background: transparent;
+      color: inherit;
+      font-size: inherit;
+      padding: 0;
+      border-radius: 0;
+      word-break: normal;
+      white-space: pre;
+    }}
   </style>
 </head>
 <body>
@@ -502,18 +570,19 @@ HTML_SHELL = """<!DOCTYPE html>
     trF.className = "filters";
     const fCells = [
       null,
-      {{ ph: "Filter #…" }},
+      null,
       {{ ph: "Filter rule name…" }},
       {{ ph: "Filter description…" }},
     ];
     const rgFilterInputs = [];
     for (let c = 0; c < 4; c++) {{
       const th = document.createElement("th");
-      if (c === 0) th.className = "no-sort";
-      else {{
+      if (c < 2) {{
+        th.className = "no-sort";
+      }} else {{
         const inp = document.createElement("input");
         inp.type = "search";
-        inp.id = "rgf-" + pid + "-" + (c - 1);
+        inp.id = "rgf-" + pid + "-" + (c - 2);
         inp.setAttribute("autocomplete", "off");
         inp.placeholder = fCells[c].ph;
         th.appendChild(inp);
@@ -594,13 +663,10 @@ HTML_SHELL = """<!DOCTYPE html>
     }}
 
     function rgMatch(row, filters) {{
-      for (let c = 0; c < 3; c++) {{
+      for (let c = 0; c < 2; c++) {{
         const q = norm(filters[c]).trim();
         if (!q) continue;
         if (c === 0) {{
-          const n = String(row.ord + 1);
-          if (!norm(n).includes(q)) return false;
-        }} else if (c === 1) {{
           if (!norm(row.rid).includes(q)) return false;
         }} else {{
           if (!norm(row.title + " " + row.desc).includes(q)) return false;
@@ -620,6 +686,203 @@ HTML_SHELL = """<!DOCTYPE html>
       return 0;
     }}
 
+    function escapeHtml(str) {{
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }}
+
+    function preprocessNumberedGlue(s) {{
+      const nl = String.fromCharCode(10);
+      return String(s).replace(/([.!?])(\\s+)(\\d+)(\\.\\s+)(?=[A-Z$"'])/g, function (_, a, b, c, d) {{
+        return a + b + nl + c + d;
+      }});
+    }}
+
+    function extractBalancedJson(s, start) {{
+      const ch = s.charAt(start);
+      if (ch !== "{{" && ch !== "[") return null;
+      const openBrace = ch === "{{";
+      let depth = 0;
+      let inStr = false;
+      let esc = false;
+      for (let i = start; i < s.length; i++) {{
+        const c = s.charAt(i);
+        if (inStr) {{
+          if (esc) {{
+            esc = false;
+          }} else if (c === "\\\\") {{
+            esc = true;
+          }} else if (c === '"') {{
+            inStr = false;
+          }}
+          continue;
+        }}
+        if (c === '"') {{
+          inStr = true;
+          continue;
+        }}
+        if (openBrace) {{
+          if (c === "{{") depth++;
+          else if (c === "}}") {{
+            depth--;
+            if (depth === 0) return [i + 1, s.slice(start, i + 1)];
+          }}
+        }} else {{
+          if (c === "[") depth++;
+          else if (c === "]") {{
+            depth--;
+            if (depth === 0) return [i + 1, s.slice(start, i + 1)];
+          }}
+        }}
+      }}
+      return null;
+    }}
+
+    function tryPrettyJsonOrYamlBlock(para) {{
+      const t = para.trim();
+      if (!t) return null;
+      if (t.startsWith("{{") || t.startsWith("[")) {{
+        const ext = extractBalancedJson(t, 0);
+        if (ext && ext[0] === t.length) {{
+          try {{
+            const parsed = JSON.parse(ext[1]);
+            const pretty = JSON.stringify(parsed, null, 2);
+            return pretty;
+          }} catch (e) {{
+            return ext[1];
+          }}
+        }}
+      }}
+      const lines = t.split(/\\n/);
+      const nonBlank = lines.filter((ln) => ln.trim());
+      if (nonBlank.length < 3) return null;
+      const yamlish = nonBlank.filter((ln) => /^\\s*(?:[-*]\\s+\\S|[A-Za-z0-9_.-]+:\\s)/.test(ln)).length;
+      if (yamlish / nonBlank.length >= 0.65) return t;
+      return null;
+    }}
+
+    function appendUriAndPaths(parent, rawChunk) {{
+      if (!rawChunk) return;
+      const URI_RE = /(https?:\\/\\/[^\\s<>"']+|ftp:\\/\\/[^\\s<>"']+)/gi;
+      let pos = 0;
+      let m;
+      while ((m = URI_RE.exec(rawChunk)) !== null) {{
+        appendPathsOnly(parent, rawChunk.slice(pos, m.index));
+        const url = m[1];
+        const a = document.createElement("a");
+        a.className = "rule-uri";
+        a.href = url;
+        a.rel = "noopener noreferrer";
+        a.target = "_blank";
+        a.textContent = url;
+        parent.appendChild(a);
+        pos = m.index + m[1].length;
+      }}
+      appendPathsOnly(parent, rawChunk.slice(pos));
+    }}
+
+    function appendPathsOnly(parent, chunk) {{
+      if (!chunk) return;
+      const t = String(chunk);
+      const oneLine = t.trim();
+      if ((oneLine.startsWith("{{") && oneLine.endsWith("}}")) || (oneLine.startsWith("[") && oneLine.endsWith("]"))) {{
+        try {{
+          const parsed = JSON.parse(oneLine);
+          const pretty = JSON.stringify(parsed, null, 2);
+          const pre = document.createElement("pre");
+          pre.className = "rule-block";
+          const code = document.createElement("code");
+          code.textContent = pretty;
+          pre.appendChild(code);
+          parent.appendChild(pre);
+          return;
+        }} catch (e) {{}}
+      }}
+      const _Q = String.fromCharCode(34);
+      const PATH_RE = new RegExp("(^|[\\\\s" + _Q + "'(,:;]|\\\\[)(\\\\/[A-Za-z0-9][A-Za-z0-9_.\\\\/-]*)(?![A-Za-z0-9_.\\\\/-])", "g");
+      let last = 0;
+      let pm;
+      while ((pm = PATH_RE.exec(t)) !== null) {{
+        const pre = pm[1];
+        const path = pm[2];
+        const idx = pm.index;
+        const mid = t.slice(last, idx + pre.length);
+        if (mid) parent.appendChild(document.createTextNode(mid));
+        const code = document.createElement("code");
+        code.className = "rule-path";
+        code.textContent = path;
+        parent.appendChild(code);
+        last = idx + pre.length + path.length;
+      }}
+      if (last < t.length) parent.appendChild(document.createTextNode(t.slice(last)));
+    }}
+
+    function renderInlineFragmentsInto(el, rawText) {{
+      appendUriAndPaths(el, rawText);
+    }}
+
+    function appendPreBlock(container, langHint, text) {{
+      const pre = document.createElement("pre");
+      pre.className = "rule-block" + (langHint ? " rule-block-" + langHint : "");
+      const code = document.createElement("code");
+      code.textContent = text;
+      pre.appendChild(code);
+      container.appendChild(pre);
+    }}
+
+    function renderRuleDescriptionRich(container, raw) {{
+      const text = raw == null ? "" : String(raw);
+      if (!text.trim()) {{
+        container.textContent = "(no description on Rule CR)";
+        return;
+      }}
+      const normalized = preprocessNumberedGlue(text);
+      const paragraphs = normalized.split(/\\n(?:\\\\s*\\n)+/);
+      for (let pi = 0; pi < paragraphs.length; pi++) {{
+        let para = paragraphs[pi];
+        if (!para.trim()) continue;
+        const block = tryPrettyJsonOrYamlBlock(para);
+        if (block !== null) {{
+          appendPreBlock(container, para.trim().startsWith("{{") || para.trim().startsWith("[") ? "json" : "yaml", block);
+          continue;
+        }}
+        const lines = para.split(/\\n/);
+        let li = 0;
+        while (li < lines.length) {{
+          const line = lines[li];
+          const numM = line.match(/^\\s*(\\d+)\\.\\s+(.*)$/);
+          if (numM) {{
+            const ol = document.createElement("ol");
+            ol.className = "rule-desc-list";
+            while (li < lines.length) {{
+              const m2 = lines[li].match(/^\\s*\\d+\\.\\s+(.*)$/);
+              if (!m2) break;
+              const item = document.createElement("li");
+              renderInlineFragmentsInto(item, m2[1]);
+              ol.appendChild(item);
+              li++;
+            }}
+            container.appendChild(ol);
+            continue;
+          }}
+          const buf = [];
+          while (li < lines.length && !/^\\s*\\d+\\.\\s+/.test(lines[li])) {{
+            buf.push(lines[li]);
+            li++;
+          }}
+          if (buf.length) {{
+            const div = document.createElement("div");
+            div.className = "rule-desc-para";
+            renderInlineFragmentsInto(div, buf.join(String.fromCharCode(10)));
+            container.appendChild(div);
+          }}
+        }}
+      }}
+    }}
+
     function fillRuleDetailCell(tdCell, rid) {{
       const info = RULE_CATALOG[rid];
       tdCell.textContent = "";
@@ -631,16 +894,12 @@ HTML_SHELL = """<!DOCTYPE html>
         tdCell.appendChild(hb);
         return;
       }}
-      const ht = document.createElement("div");
-      ht.className = "rule-detail-title";
-      ht.textContent = info.title || rid;
       const hm = document.createElement("div");
       hm.className = "rule-detail-meta";
       hm.textContent = "Severity: " + (info.severity || "—") + " · Rule id: " + rid;
       const hb = document.createElement("div");
       hb.className = "rule-detail-body";
-      hb.textContent = info.description || "(no description on Rule CR)";
-      tdCell.appendChild(ht);
+      renderRuleDescriptionRich(hb, info.description);
       tdCell.appendChild(hm);
       tdCell.appendChild(hb);
     }}
