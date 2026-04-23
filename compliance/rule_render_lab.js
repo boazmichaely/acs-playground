@@ -238,6 +238,26 @@
     "g"
   );
 
+  /**
+   * Split prose into { text } and { path } spans using PATH_RE so kebab/infra/camel
+   * rules never run inside filenames like /tmp/allowed-import-registries-patch.yaml.
+   */
+  function splitPathSegments(s) {
+    const out = [];
+    const re = new RegExp(PATH_RE.source, "g");
+    let last = 0;
+    let pm;
+    while ((pm = re.exec(s)) !== null) {
+      if (pm.index > last) out.push({ t: "text", s: s.slice(last, pm.index) });
+      const pre = pm[1] || "";
+      if (pre) out.push({ t: "text", s: pre });
+      out.push({ t: "path", s: pm[2] });
+      last = pm.index + pm[0].length;
+    }
+    if (last < s.length) out.push({ t: "text", s: s.slice(last) });
+    return out.length ? out : [{ t: "text", s: s }];
+  }
+
   function escapeRe(s) {
     return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
@@ -464,37 +484,47 @@
 
     function emitInlinedText(textOnly) {
       if (!textOnly) return;
-      let parts = [{ t: "text", s: textOnly }];
-      for (const { re, g } of INLINE) {
-        const next = [];
-        for (const p of parts) {
-          if (p.t !== "text") {
-            next.push(p);
-            continue;
-          }
-          const s = p.s;
-          let last = 0;
-          let m;
-          re.lastIndex = 0;
-          while ((m = re.exec(s)) !== null) {
-            if (m.index > last) next.push({ t: "text", s: s.slice(last, m.index) });
-            const cap = g ? m[g] : m[0];
-            next.push({ t: "code", s: cap });
-            last = m.index + m[0].length;
-          }
-          if (last < s.length) next.push({ t: "text", s: s.slice(last) });
-          if (next.length === 0) next.push(p);
+      const pathPieces = splitPathSegments(textOnly);
+      for (const seg of pathPieces) {
+        if (seg.t === "path") {
+          const pc = document.createElement("code");
+          pc.className = "rule-path";
+          pc.textContent = seg.s;
+          parent.appendChild(pc);
+          continue;
         }
-        parts = next;
-      }
-      for (const p of parts) {
-        if (p.t === "code") {
-          const c = document.createElement("code");
-          c.className = "rule-inline";
-          c.textContent = p.s;
-          parent.appendChild(c);
-        } else {
-          appendUriAndPaths(parent, p.s);
+        let parts = [{ t: "text", s: seg.s }];
+        for (const { re, g } of INLINE) {
+          const next = [];
+          for (const p of parts) {
+            if (p.t !== "text") {
+              next.push(p);
+              continue;
+            }
+            const s = p.s;
+            let last = 0;
+            let m;
+            re.lastIndex = 0;
+            while ((m = re.exec(s)) !== null) {
+              if (m.index > last) next.push({ t: "text", s: s.slice(last, m.index) });
+              const cap = g ? m[g] : m[0];
+              next.push({ t: "code", s: cap });
+              last = m.index + m[0].length;
+            }
+            if (last < s.length) next.push({ t: "text", s: s.slice(last) });
+            if (next.length === 0) next.push(p);
+          }
+          parts = next;
+        }
+        for (const p of parts) {
+          if (p.t === "code") {
+            const c = document.createElement("code");
+            c.className = "rule-inline";
+            c.textContent = p.s;
+            parent.appendChild(c);
+          } else {
+            appendUriAndPaths(parent, p.s);
+          }
         }
       }
     }
