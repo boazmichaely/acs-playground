@@ -63,9 +63,16 @@
     return { prose: t.slice(0, m.index + 1), script: afterColon };
   }
 
+  /** Captions like "add the following line(s)" or "add a line of the following form" before auditctl lines. */
+  const AUDIT_ADD_LINE_PHRASE_RE_GI =
+    /(?:add\s+the\s+following\s+lines?\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b)/gi;
+  const AUDIT_ADD_LINE_PHRASE_RE_I =
+    /(?:add\s+the\s+following\s+lines?\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b)/i;
+
   /**
-   * Compliance rules often use "add the following line(s):" then one or more auditctl-style
-   * lines (-a …, -w …). Capture those lines as a shell block; keep the "to …/path …:" tail in prose.
+   * Compliance rules often use "add the following line(s):" or "add a line of the following form"
+   * then one or more auditctl-style lines (-a …, -w …). Capture those lines as a shell block;
+   * keep the "to …/path …:" tail in prose.
    */
   function consumeAuditFollowingBlock(chunk, m) {
     const proseStart = m.index;
@@ -111,7 +118,7 @@
 
   function renderAuditAddFollowingThenRest(parent, chunk, opts) {
     if (!chunk) return;
-    const matches = [...String(chunk).matchAll(/add\s+the\s+following\s+lines?\b/gi)];
+    const matches = [...String(chunk).matchAll(AUDIT_ADD_LINE_PHRASE_RE_GI)];
     if (!matches.length) {
       renderTextWithDollarShellBlocks(parent, chunk, opts);
       return;
@@ -797,14 +804,14 @@
   }
 
   /**
-   * Rule CRs often put "add the following line(s):" in one paragraph and the auditctl
-   * -a / -w lines in the next (separated by a blank line). Paragraph splitting would
-   * otherwise strand the dash lines without the phrase; merge those pairs into one block.
+   * Rule CRs often put audit boilerplate ("add the following line(s):", "add a line of the
+   * following form", …) in one paragraph and the auditctl -a / -w lines in the next (separated
+   * by a blank line). Paragraph splitting would otherwise strand the dash lines without the
+   * phrase; merge those pairs into one block.
    */
   function mergeAdjacentAuditParagraphs(paras) {
     const out = [];
     const nl = String.fromCharCode(10);
-    const phraseRe = /add\s+the\s+following\s+lines?\b/i;
     function firstNonEmptyLine(s) {
       const lines = String(s).split(/\n/);
       for (let j = 0; j < lines.length; j++) {
@@ -819,7 +826,7 @@
     while (i < paras.length) {
       let cur = paras[i];
       i++;
-      while (i < paras.length && phraseRe.test(cur) && startsDashBlock(paras[i])) {
+      while (i < paras.length && AUDIT_ADD_LINE_PHRASE_RE_I.test(cur) && startsDashBlock(paras[i])) {
         cur = cur.trimEnd() + nl + paras[i].trimStart();
         i++;
       }
