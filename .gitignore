@@ -1,0 +1,14 @@
+# Local credentials / secrets — do not commit
+bm-customer-demo2-api-key
+*api-key*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+
+# OS / editor
+.DS_Store
+*.swp
+*~
