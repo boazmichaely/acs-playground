@@ -249,7 +249,7 @@
 <body>
   <h1>Compliance Operator profiles</h1>
   <p class="meta">
-    Generated: <strong>2026-04-23 23:18 UTC</strong>.
+    Generated: <strong>2026-04-23 23:21 UTC</strong>.
     Source: cluster <code>profiles.compliance.openshift.io</code> in <code>openshift-compliance</code>.
     <strong>Rule set</strong> is <code>len(.rules)</code> on each Profile CR; <strong>Version</strong> is the Profile <code>.version</code> field (same labels as Red Hat ACS schedule UI).
     <strong>Summary</strong> is curated in this generator script (with a trimmed <code>description</code> fallback for unknown profile families).
@@ -362,18 +362,28 @@
   }
 
   /**
-   * Boilerplate before auditctl-style lines (-a …, -w …). Wording varies across Rule CRs;
-   * extend the alternation when new catalog phrasing appears.
+   * Boilerplate before recipe lines: auditctl (-a / -w …) or simple config assignments (KEY = VAL).
+   * Extend the alternation when new catalog phrasing appears; do not glob-scan whole descriptions.
    */
   const AUDIT_ADD_LINE_PHRASE_RE_GI =
-    /(?:add\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b)/gi;
+    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b)/gi;
   const AUDIT_ADD_LINE_PHRASE_RE_I =
-    /(?:add\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b)/i;
+    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b)/i;
+
+  /** auditd.conf-style assignment after a caption (catalog uses simple keys and placeholders). */
+  const AUDIT_RECIPE_CONF_ASSIGN = /^\s*[A-Za-z0-9_.]+\s*=\s*\S/;
+
+  function isAuditDashRecipeLine(ln) {
+    return /^\s*-\S/.test(ln);
+  }
+
+  function isConfAssignRecipeLine(ln) {
+    return AUDIT_RECIPE_CONF_ASSIGN.test(ln);
+  }
 
   /**
-   * After a matching caption, capture consecutive lines starting with "-" + non-space (auditctl
-   * -a / -w / …). Prose through "to …/path …" stays in the normal flow; the dash lines become one
-   * rule-shell block.
+   * After a matching caption, capture consecutive auditctl lines (-a / -w …) or consecutive
+   * KEY = VALUE assignment lines. Prose stays in the normal flow; the recipe becomes one rule-shell block.
    */
   function consumeAuditFollowingBlock(chunk, m) {
     const proseStart = m.index;
@@ -384,32 +394,47 @@
     while (i < lines.length && lines[i] === "") i++;
     while (i < lines.length) {
       const ln = lines[i];
-      if (/^\s*-\S/.test(ln)) break;
-      if (ln === "" && i + 1 < lines.length && /^\s*-\S/.test(lines[i + 1])) break;
+      if (isAuditDashRecipeLine(ln) || isConfAssignRecipeLine(ln)) break;
+      if (ln === "" && i + 1 < lines.length) {
+        const nxt = lines[i + 1];
+        if (isAuditDashRecipeLine(nxt) || isConfAssignRecipeLine(nxt)) break;
+      }
       i++;
     }
     while (i < lines.length && lines[i] === "") i++;
     if (i >= lines.length) return null;
-    const dashes = [];
-    while (i < lines.length) {
-      const ln = lines[i];
-      if (!ln.trim()) break;
-      if (!/^\s*-\S/.test(ln)) break;
-      dashes.push(ln);
-      i++;
+    const block = [];
+    if (isAuditDashRecipeLine(lines[i])) {
+      while (i < lines.length) {
+        const ln = lines[i];
+        if (!ln.trim()) break;
+        if (!isAuditDashRecipeLine(ln)) break;
+        block.push(ln);
+        i++;
+      }
+    } else if (isConfAssignRecipeLine(lines[i])) {
+      while (i < lines.length) {
+        const ln = lines[i];
+        if (!ln.trim()) break;
+        if (!isConfAssignRecipeLine(ln)) break;
+        block.push(ln);
+        i++;
+      }
+    } else {
+      return null;
     }
-    if (!dashes.length) return null;
-    const dashStart = chunk.indexOf(dashes[0], pe);
-    if (dashStart < 0) return null;
-    const proseSpan = chunk.slice(proseStart, dashStart);
-    let pos = dashStart;
-    for (let k = 0; k < dashes.length; k++) {
-      if (!chunk.startsWith(dashes[k], pos)) return null;
-      pos += dashes[k].length;
+    if (!block.length) return null;
+    const blockStart = chunk.indexOf(block[0], pe);
+    if (blockStart < 0) return null;
+    const proseSpan = chunk.slice(proseStart, blockStart);
+    let pos = blockStart;
+    for (let k = 0; k < block.length; k++) {
+      if (!chunk.startsWith(block[k], pos)) return null;
+      pos += block[k].length;
       if (pos < chunk.length && chunk.charAt(pos) === "\r") pos++;
       if (pos < chunk.length && chunk.charAt(pos) === "\n") pos++;
     }
-    const dashText = chunk.slice(dashStart, pos);
+    const dashText = chunk.slice(blockStart, pos);
     let resumeAt = pos;
     while (resumeAt < chunk.length && (chunk.charAt(resumeAt) === "\n" || chunk.charAt(resumeAt) === "\r")) {
       resumeAt++;
@@ -1106,8 +1131,8 @@
 
   /**
    * Rule CRs often put audit boilerplate (see AUDIT_ADD_LINE_PHRASE_RE_I) in one paragraph and
-   * the auditctl -a / -w lines in the next (separated by a blank line). Paragraph splitting would
-   * otherwise strand the dash lines without the phrase; merge those pairs into one block.
+   * recipe lines (-a … or KEY = VAL) in the next (separated by a blank line). Paragraph splitting
+   * would otherwise strand those lines without the phrase; merge those pairs into one block.
    */
   function mergeAdjacentAuditParagraphs(paras) {
     const out = [];
@@ -1119,14 +1144,15 @@
       }
       return "";
     }
-    function startsDashBlock(s) {
-      return /^\s*-\S/.test(firstNonEmptyLine(s));
+    function startsRecipeContinuation(s) {
+      const ln = firstNonEmptyLine(s);
+      return isAuditDashRecipeLine(ln) || isConfAssignRecipeLine(ln);
     }
     let i = 0;
     while (i < paras.length) {
       let cur = paras[i];
       i++;
-      while (i < paras.length && AUDIT_ADD_LINE_PHRASE_RE_I.test(cur) && startsDashBlock(paras[i])) {
+      while (i < paras.length && AUDIT_ADD_LINE_PHRASE_RE_I.test(cur) && startsRecipeContinuation(paras[i])) {
         cur = cur.trimEnd() + nl + paras[i].trimStart();
         i++;
       }
