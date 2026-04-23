@@ -621,7 +621,7 @@
     container.textContent = "";
     const text = raw == null ? "" : String(raw);
     if (!text.trim()) {
-      container.textContent = "(empty)";
+      container.textContent = "(no description on Rule CR)";
       return;
     }
     const normalized = preprocessDescription(text);
@@ -662,8 +662,9 @@
 
   function run() {
     const el = document.getElementById("fixture");
-    const data = JSON.parse(el.textContent);
     const host = document.getElementById("out");
+    if (!el || !host) return;
+    const data = JSON.parse(el.textContent);
     host.textContent = "";
     const bundles =
       data.profiles && data.profiles.length
@@ -696,6 +697,10 @@
       host.appendChild(art);
     }
   }
+
+  try {
+    globalThis.renderRuleDescriptionRich = renderDescription;
+  } catch (_) {}
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
   else run();

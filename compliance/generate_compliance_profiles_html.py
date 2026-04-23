@@ -32,6 +32,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# Injected into HTML_SHELL after str.format (raw `{{`/`}}` in the JS would break .format).
+RULE_RENDERER_SENTINEL = "___RULE_RENDERER_JS___"
+RULE_RENDERER_JS_NAME = "rule_render_lab.js"
+
 
 def summarize(name: str, product: str, description: str = "") -> str:
     """One-line summary from profile name + type; unknown names fall back to trimmed description."""
@@ -356,18 +360,33 @@ HTML_SHELL = """<!DOCTYPE html>
     }}
     .rule-detail-meta {{ font-size: 0.75rem; color: #71717a; margin-bottom: 0.45rem; }}
     .rule-detail-body {{
-      font-size: 0.8rem;
-      color: #3f3f46;
+      font-size: 0.84rem;
       line-height: 1.45;
+      color: #3f3f46;
       white-space: normal;
     }}
-    .rule-desc-para {{ white-space: pre-wrap; margin: 0.35rem 0; }}
-    .rule-desc-list {{
+    .rule-detail-body .rule-desc-para {{
+      white-space: pre-wrap;
+      margin: 0.35rem 0;
+    }}
+    .rule-detail-body .rule-desc-list {{
       margin: 0.35rem 0 0.35rem 1.1rem;
       padding-left: 0.4rem;
       list-style: decimal;
     }}
-    .rule-desc-list li {{ margin: 0.3rem 0; white-space: pre-wrap; }}
+    .rule-detail-body .rule-desc-list li {{
+      margin: 0.65rem 0;
+      white-space: pre-wrap;
+    }}
+    .rule-detail-body .rule-desc-ul {{
+      margin: 0.4rem 0 0.4rem 1.25rem;
+      padding-left: 0.45rem;
+      list-style-type: disc;
+    }}
+    .rule-detail-body .rule-desc-ul li {{
+      margin: 0.28rem 0;
+      white-space: pre-wrap;
+    }}
     .rule-detail-body a.rule-uri {{
       color: #2563eb;
       text-decoration: underline;
@@ -375,7 +394,8 @@ HTML_SHELL = """<!DOCTYPE html>
       word-break: break-all;
     }}
     .rule-detail-body a.rule-uri:hover {{ color: #1d4ed8; }}
-    .rule-detail-body code.rule-path {{
+    .rule-detail-body code.rule-path,
+    .rule-detail-body code.rule-inline {{
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 0.78em;
       background: #f4f4f5;
@@ -384,17 +404,22 @@ HTML_SHELL = """<!DOCTYPE html>
       word-break: break-all;
     }}
     .rule-detail-body pre.rule-block {{
-      margin: 0.45rem 0;
-      padding: 0.5rem 0.6rem;
-      background: #18181b;
-      color: #e4e4e7;
+      margin: 0.5rem 0;
+      padding: 0.55rem 0.65rem;
+      background: #e8eef9;
+      color: #0f172a;
+      border: 1px solid #c7d2fe;
       border-radius: 6px;
       overflow: auto;
       font-size: 0.72rem;
       line-height: 1.45;
       white-space: pre;
       tab-size: 2;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }}
+    .rule-detail-body pre.rule-block.rule-yaml {{ border-left: 3px solid #22c55e; }}
+    .rule-detail-body pre.rule-block.rule-json {{ border-left: 3px solid #0ea5e9; }}
+    .rule-detail-body pre.rule-block.rule-shell {{ border-left: 3px solid #f97316; }}
     .rule-detail-body pre.rule-block code {{
       font-family: inherit;
       background: transparent;
@@ -455,6 +480,9 @@ HTML_SHELL = """<!DOCTYPE html>
 
   <script type="application/json" id="profile-data">
 {raw_json}
+  </script>
+  <script>
+___RULE_RENDERER_JS___
   </script>
   <script>
 (function () {{
@@ -1223,6 +1251,13 @@ def main() -> None:
         namespace=ns_esc,
         raw_json=raw_json,
     )
+    js_path = Path(__file__).resolve().parent / RULE_RENDERER_JS_NAME
+    renderer_js = js_path.read_text(encoding="utf-8")
+    if RULE_RENDERER_SENTINEL not in out:
+        raise SystemExit(f"Internal error: sentinel {RULE_RENDERER_SENTINEL!r} missing from HTML template.")
+    out = out.replace(RULE_RENDERER_SENTINEL, renderer_js, 1)
+    if RULE_RENDERER_SENTINEL in out:
+        raise SystemExit(f"rule renderer JS still contains sentinel token {RULE_RENDERER_SENTINEL!r}; refuse to write.")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(out, encoding="utf-8")
     print(f"Wrote {len(rows)} profiles to {args.output}", file=sys.stderr)
