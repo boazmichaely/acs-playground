@@ -220,6 +220,8 @@
   /**
    * Whole identifiers that are usually infrastructure / API vocabulary and often appear
    * all-lowercase or with hyphens (not covered by PascalCase / camelCase rules).
+   * Reject a hyphen immediately before/after the match so `kubelet` is not styled inside
+   * `--kubelet-https` (word boundaries still exist between `-` and letters).
    */
   const INFRA_ALLOWLIST = [
     "OAuth",
@@ -235,7 +237,10 @@
     "runc",
   ];
 
-  const INFRA_INLINE_RE = new RegExp("\\b(" + INFRA_ALLOWLIST.map(escapeRe).join("|") + ")\\b", "gi");
+  const INFRA_INLINE_RE = new RegExp(
+    "(?<!-)\\b(" + INFRA_ALLOWLIST.map(escapeRe).join("|") + ")\\b(?!-)",
+    "gi"
+  );
 
   /** Long CLI flags with `=` value (`--cert-file=…`, `--peer-auto-tls=true`). Requires a hyphen in the flag name. */
   const LONG_DASH_FLAG_EQ_RE = /--[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)+=[^\s,)]+/gi;
