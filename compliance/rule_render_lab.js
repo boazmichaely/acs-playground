@@ -68,9 +68,9 @@
    * extend the alternation when new catalog phrasing appears.
    */
   const AUDIT_ADD_LINE_PHRASE_RE_GI =
-    /(?:add\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b)/gi;
+    /(?:add\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b)/gi;
   const AUDIT_ADD_LINE_PHRASE_RE_I =
-    /(?:add\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b)/i;
+    /(?:add\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b)/i;
 
   /**
    * After a matching caption, capture consecutive lines starting with "-" + non-space (auditctl
