@@ -249,7 +249,7 @@
 <body>
   <h1>Compliance Operator profiles</h1>
   <p class="meta">
-    Generated: <strong>2026-04-23 21:36 UTC</strong>.
+    Generated: <strong>2026-04-23 21:41 UTC</strong>.
     Source: cluster <code>profiles.compliance.openshift.io</code> in <code>openshift-compliance</code>.
     <strong>Rule set</strong> is <code>len(.rules)</code> on each Profile CR; <strong>Version</strong> is the Profile <code>.version</code> field (same labels as Red Hat ACS schedule UI).
     <strong>Summary</strong> is curated in this generator script (with a trimmed <code>description</code> fallback for unknown profile families).
@@ -696,12 +696,15 @@
     if (last < t.length) parent.appendChild(document.createTextNode(t.slice(last)));
   }
 
+  /** http(s) and ftp URLs; same pattern everywhere so links are not split by inline rules. */
+  const ABSOLUTE_URI_RE = /(https?:\/\/[^\s<>"']+|ftp:\/\/[^\s<>"']+)/gi;
+
   function appendUriAndPaths(parent, rawChunk) {
     if (!rawChunk) return;
-    const URI_RE = /(https?:\/\/[^\s<>"']+|ftp:\/\/[^\s<>"']+)/gi;
     let pos = 0;
     let m;
-    while ((m = URI_RE.exec(rawChunk)) !== null) {
+    ABSOLUTE_URI_RE.lastIndex = 0;
+    while ((m = ABSOLUTE_URI_RE.exec(rawChunk)) !== null) {
       appendPathsOnly(parent, rawChunk.slice(pos, m.index));
       const url = m[1];
       const a = document.createElement("a");
@@ -711,7 +714,7 @@
       a.target = "_blank";
       a.textContent = url;
       parent.appendChild(a);
-      pos = m.index + m[1].length;
+      pos = m.index + m[0].length;
     }
     appendPathsOnly(parent, rawChunk.slice(pos));
   }
@@ -740,39 +743,61 @@
       { re: /\boc patch\b/gi, g: 0 },
       { re: /\b(?:TLSv1\.[0-3]|TLSv[12])\b/g, g: 0 }
     );
-    let parts = [{ t: "text", s: rawChunk }];
-    for (const { re, g } of INLINE) {
-      const next = [];
+
+    function emitInlinedText(textOnly) {
+      if (!textOnly) return;
+      let parts = [{ t: "text", s: textOnly }];
+      for (const { re, g } of INLINE) {
+        const next = [];
+        for (const p of parts) {
+          if (p.t !== "text") {
+            next.push(p);
+            continue;
+          }
+          const s = p.s;
+          let last = 0;
+          let m;
+          re.lastIndex = 0;
+          while ((m = re.exec(s)) !== null) {
+            if (m.index > last) next.push({ t: "text", s: s.slice(last, m.index) });
+            const cap = g ? m[g] : m[0];
+            next.push({ t: "code", s: cap });
+            last = m.index + m[0].length;
+          }
+          if (last < s.length) next.push({ t: "text", s: s.slice(last) });
+          if (next.length === 0) next.push(p);
+        }
+        parts = next;
+      }
       for (const p of parts) {
-        if (p.t !== "text") {
-          next.push(p);
-          continue;
+        if (p.t === "code") {
+          const c = document.createElement("code");
+          c.className = "rule-inline";
+          c.textContent = p.s;
+          parent.appendChild(c);
+        } else {
+          appendUriAndPaths(parent, p.s);
         }
-        const s = p.s;
-        let last = 0;
-        let m;
-        re.lastIndex = 0;
-        while ((m = re.exec(s)) !== null) {
-          if (m.index > last) next.push({ t: "text", s: s.slice(last, m.index) });
-          const cap = g ? m[g] : m[0];
-          next.push({ t: "code", s: cap });
-          last = m.index + m[0].length;
-        }
-        if (last < s.length) next.push({ t: "text", s: s.slice(last) });
-        if (next.length === 0) next.push(p);
-      }
-      parts = next;
-    }
-    for (const p of parts) {
-      if (p.t === "code") {
-        const c = document.createElement("code");
-        c.className = "rule-inline";
-        c.textContent = p.s;
-        parent.appendChild(c);
-      } else {
-        appendUriAndPaths(parent, p.s);
       }
     }
+
+    const full = String(rawChunk);
+    let pos = 0;
+    let um;
+    ABSOLUTE_URI_RE.lastIndex = 0;
+    while ((um = ABSOLUTE_URI_RE.exec(full)) !== null) {
+      if (um.index > pos) emitInlinedText(full.slice(pos, um.index));
+      const url = um[1];
+      const a = document.createElement("a");
+      a.className = "rule-uri";
+      a.href = url;
+      a.rel = "noopener noreferrer";
+      a.target = "_blank";
+      a.textContent = url;
+      parent.appendChild(a);
+      pos = um.index + um[0].length;
+    }
+    if (pos < full.length) emitInlinedText(full.slice(pos));
   }
 
   const DOLLAR_SHELL_LINE_TEST = /^\s*\$\s+.+/;
