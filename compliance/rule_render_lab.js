@@ -254,9 +254,10 @@
   /**
    * Kebab-case API-ish identifiers (tls-cert-file, service-network-serving-certkey).
    * At least three segments; avoids short prose ("check-in-time"). Skips path-like
-   * segments (no match immediately after / or :.) so URL paths are not styled.
+   * segments (no match immediately after /, :, #, or .) so URL paths and #fragments
+   * are not split (e.g. …md#questions-and-answers must stay one link).
    */
-  const KEBAB_INLINE_RE = /(?<![/:.\w])\b[a-z][a-z0-9]{2,}(?:-[a-z0-9]{2,}){2,}\b/gi;
+  const KEBAB_INLINE_RE = /(?<![#/:.\w])\b[a-z][a-z0-9]{2,}(?:-[a-z0-9]{2,}){2,}\b/gi;
 
   /** Hyphenated names where bare `etcd` would otherwise match only a substring. */
   const ETCD_COMPOUND_RE = /\bopenshift-etcd\b|\betcd-pod\*?(?=\s|,|\.|;|\)|]|'|"|$)/gi;
