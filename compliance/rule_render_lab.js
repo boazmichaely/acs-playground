@@ -245,6 +245,19 @@
   /** Long CLI flags with `=` value (`--cert-file=…`, `--peer-auto-tls=true`). Requires a hyphen in the flag name. */
   const LONG_DASH_FLAG_EQ_RE = /--[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)+=[^\s,)]+/gi;
 
+  /**
+   * CLI flags without `=` (`--kubelet-https`, `--tls-min-version`). Must run after
+   * LONG_DASH_FLAG_EQ_RE so values like `--peer-auto-tls=true` stay one span.
+   */
+  const LONG_DASH_FLAG_PLAIN_RE = /--[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)*/gi;
+
+  /**
+   * Kebab-case API-ish identifiers (tls-cert-file, service-network-serving-certkey).
+   * At least three segments; avoids short prose ("check-in-time"). Skips path-like
+   * segments (no match immediately after / or :.) so URL paths are not styled.
+   */
+  const KEBAB_INLINE_RE = /(?<![/:.\w])\b[a-z][a-z0-9]{2,}(?:-[a-z0-9]{2,}){2,}\b/gi;
+
   /** Hyphenated names where bare `etcd` would otherwise match only a substring. */
   const ETCD_COMPOUND_RE = /\bopenshift-etcd\b|\betcd-pod\*?(?=\s|,|\.|;|\)|]|'|"|$)/gi;
 
@@ -394,6 +407,7 @@
     const INLINE = [
       { re: /`([^`]+)`/g, g: 1 },
       { re: LONG_DASH_FLAG_EQ_RE, g: 0 },
+      { re: LONG_DASH_FLAG_PLAIN_RE, g: 0 },
       { re: ETCD_COMPOUND_RE, g: 0 },
       { re: /\bvar-[a-z0-9][-a-z0-9]*\b/gi, g: 0 },
       { re: /\bvar_[a-z0-9_]+\b/gi, g: 0 },
@@ -407,6 +421,7 @@
       { re: DOTTED_API_FIELD_RE, g: 0 },
       { re: PASCAL_TYPE_RE, g: 0 },
       { re: CAMEL_FIELD_RE, g: 0 },
+      { re: KEBAB_INLINE_RE, g: 0 },
       { re: /\boc patch\b/gi, g: 0 },
       { re: /\b(?:TLSv1\.[0-3]|TLSv[12])\b/g, g: 0 }
     );
