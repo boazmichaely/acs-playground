@@ -29,8 +29,8 @@
   function preprocessCitationLinebreaks(s) {
     const nl = String.fromCharCode(10);
     return String(s).replace(
-      /(?<![0-9])([.!?])([ \t]+)(\[\d{1,3}\])(\s*)(https?:\/\/|ftp:\/\/)/gi,
-      (_, punct, _spBefore, cite, spAfter, scheme) => punct + nl + nl + cite + spAfter + scheme
+      /(?<![0-9])([.!?])([ \t]+)(\[\d{1,3}\])(\s*)(https?:\/\/\S+|ftp:\/\/\S+)/gi,
+      (_, punct, _spBefore, cite, spAfter, url) => punct + nl + nl + cite + spAfter + url
     );
   }
 
