@@ -20,8 +20,22 @@
     return String(s).replace(/\bdone\s+(\d+\.\s+Execute\b)/gi, "done" + nl + "$1");
   }
 
+  /**
+   * Rule CRs often put references inline as ". [1]" with no newline. Insert a blank
+   * line before [n] for readability, but skip list-like "1. [1]" (digit before the dot).
+   */
+  function preprocessCitationLinebreaks(s) {
+    const nl = String.fromCharCode(10);
+    return String(s).replace(
+      /(?<![0-9])([.!?])([ \t]+)(\[\d{1,3}\])/g,
+      (_, punct, _spaces, cite) => punct + nl + nl + cite
+    );
+  }
+
   function preprocessDescription(s) {
-    return preprocessStepAfterDone(preprocessNumberedGlue(s));
+    return preprocessStepAfterDone(
+      preprocessNumberedGlue(preprocessCitationLinebreaks(s))
+    );
   }
 
   /**
