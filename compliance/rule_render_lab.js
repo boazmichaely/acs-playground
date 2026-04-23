@@ -151,8 +151,8 @@
     if (/^\{\s*$/.test(tr)) return true;
     if (/^"[\w.-]+"\s*:\s*\{/.test(tr)) return true;
     if (/^"[\w.-]+"\s*:\s*\[/.test(tr)) return true;
-    if (/^"TLS_[^"]+",?\s*$/.test(tr)) return true;
-    if (/^"[^"]+",\s*$/.test(tr)) return true;
+    /* JSON string value on its own line (often a path); allow trailing comma or none. */
+    if (/^"(?:\\.|[^"\\])*"\s*,?\s*$/.test(tr)) return true;
     if (/^\],?\s*$/.test(tr)) return true;
     if (/^\}\s*,?\s*$/.test(tr)) return true;
     return false;
