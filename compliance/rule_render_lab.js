@@ -34,9 +34,18 @@
     );
   }
 
+  /**
+   * Strip a leading "-|" some Rule CRs carry (broken YAML block chaff, not meant for users).
+   */
+  function preprocessStripLeadingYamlChaff(s) {
+    return String(s).replace(/^\-\|\s*\n*/, "");
+  }
+
   function preprocessDescription(s) {
     return preprocessStepAfterDone(
-      preprocessNumberedGlue(preprocessCitationLinebreaks(s))
+      preprocessNumberedGlue(
+        preprocessCitationLinebreaks(preprocessStripLeadingYamlChaff(s))
+      )
     );
   }
 
@@ -401,12 +410,17 @@
   /** http(s) and ftp URLs; same pattern everywhere so links are not split by inline rules. */
   const ABSOLUTE_URI_RE = /(https?:\/\/[^\s<>"']+|ftp:\/\/[^\s<>"']+)/gi;
 
+  /** New instance each scan — global regex lastIndex must not leak across appendUri + applyInline. */
+  function absoluteUriMatcher() {
+    return new RegExp(ABSOLUTE_URI_RE.source, ABSOLUTE_URI_RE.flags);
+  }
+
   function appendUriAndPaths(parent, rawChunk) {
     if (!rawChunk) return;
     let pos = 0;
     let m;
-    ABSOLUTE_URI_RE.lastIndex = 0;
-    while ((m = ABSOLUTE_URI_RE.exec(rawChunk)) !== null) {
+    const uriScan = absoluteUriMatcher();
+    while ((m = uriScan.exec(rawChunk)) !== null) {
       appendPathsOnly(parent, rawChunk.slice(pos, m.index));
       const url = m[1];
       const a = document.createElement("a");
@@ -486,8 +500,8 @@
     const full = String(rawChunk);
     let pos = 0;
     let um;
-    ABSOLUTE_URI_RE.lastIndex = 0;
-    while ((um = ABSOLUTE_URI_RE.exec(full)) !== null) {
+    const uriScan = absoluteUriMatcher();
+    while ((um = uriScan.exec(full)) !== null) {
       if (um.index > pos) emitInlinedText(full.slice(pos, um.index));
       const url = um[1];
       const a = document.createElement("a");
