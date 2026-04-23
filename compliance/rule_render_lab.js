@@ -68,9 +68,9 @@
    * Extend the alternation when new catalog phrasing appears; do not glob-scan whole descriptions.
    */
   const AUDIT_ADD_LINE_PHRASE_RE_GI =
-    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b)/gi;
+    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b|(?<!or\s)modify\s+the\s+following\s+lines?\b)/gi;
   const AUDIT_ADD_LINE_PHRASE_RE_I =
-    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b)/i;
+    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|add\s+the\s+line\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b|(?<!or\s)modify\s+the\s+following\s+lines?\b)/i;
 
   /** auditd.conf-style assignment after a caption (catalog uses simple keys and placeholders). */
   const AUDIT_RECIPE_CONF_ASSIGN = /^\s*[A-Za-z0-9_.]+\s*=\s*\S/;
