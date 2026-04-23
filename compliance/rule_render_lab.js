@@ -21,14 +21,16 @@
   }
 
   /**
-   * Rule CRs often put references inline as ". [1]" with no newline. Insert a blank
-   * line before [n] for readability, but skip list-like "1. [1]" (digit before the dot).
+   * When a footnote marker is immediately followed by a URL, authors often write
+   * "…text. [1] https://…" on one line. Insert a blank line only before [n] in that
+   * pattern so "[1] This rule…" (prose after the marker) stays inline.
+   * Skips list-like "1. [1] https://…" (digit before the period).
    */
   function preprocessCitationLinebreaks(s) {
     const nl = String.fromCharCode(10);
     return String(s).replace(
-      /(?<![0-9])([.!?])([ \t]+)(\[\d{1,3}\])/g,
-      (_, punct, _spaces, cite) => punct + nl + nl + cite
+      /(?<![0-9])([.!?])([ \t]+)(\[\d{1,3}\])(\s*)(https?:\/\/|ftp:\/\/)/gi,
+      (_, punct, _spBefore, cite, spAfter, scheme) => punct + nl + nl + cite + spAfter + scheme
     );
   }
 

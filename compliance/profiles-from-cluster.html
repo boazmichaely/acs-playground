@@ -249,7 +249,7 @@
 <body>
   <h1>Compliance Operator profiles</h1>
   <p class="meta">
-    Generated: <strong>2026-04-23 21:30 UTC</strong>.
+    Generated: <strong>2026-04-23 21:32 UTC</strong>.
     Source: cluster <code>profiles.compliance.openshift.io</code> in <code>openshift-compliance</code>.
     <strong>Rule set</strong> is <code>len(.rules)</code> on each Profile CR; <strong>Version</strong> is the Profile <code>.version</code> field (same labels as Red Hat ACS schedule UI).
     <strong>Summary</strong> is curated in this generator script (with a trimmed <code>description</code> fallback for unknown profile families).
@@ -319,14 +319,16 @@
   }
 
   /**
-   * Rule CRs often put references inline as ". [1]" with no newline. Insert a blank
-   * line before [n] for readability, but skip list-like "1. [1]" (digit before the dot).
+   * When a footnote marker is immediately followed by a URL, authors often write
+   * "…text. [1] https://…" on one line. Insert a blank line only before [n] in that
+   * pattern so "[1] This rule…" (prose after the marker) stays inline.
+   * Skips list-like "1. [1] https://…" (digit before the period).
    */
   function preprocessCitationLinebreaks(s) {
     const nl = String.fromCharCode(10);
     return String(s).replace(
-      /(?<![0-9])([.!?])([ \t]+)(\[\d{1,3}\])/g,
-      (_, punct, _spaces, cite) => punct + nl + nl + cite
+      /(?<![0-9])([.!?])([ \t]+)(\[\d{1,3}\])(\s*)(https?:\/\/|ftp:\/\/)/gi,
+      (_, punct, _spBefore, cite, spAfter, scheme) => punct + nl + nl + cite + spAfter + scheme
     );
   }
 
