@@ -63,15 +63,86 @@
     return { prose: t.slice(0, m.index + 1), script: afterColon };
   }
 
+  /**
+   * Compliance rules often use "add the following line(s):" then one or more auditctl-style
+   * lines (-a …, -w …). Capture those lines as a shell block; keep the "to …/path …:" tail in prose.
+   */
+  function consumeAuditFollowingBlock(chunk, m) {
+    const proseStart = m.index;
+    const pe = proseStart + m[0].length;
+    const after = chunk.slice(pe);
+    const lines = after.split(/\r?\n/);
+    let i = 0;
+    while (i < lines.length && lines[i] === "") i++;
+    while (i < lines.length) {
+      const ln = lines[i];
+      if (/^\s*-\S/.test(ln)) break;
+      if (ln === "" && i + 1 < lines.length && /^\s*-\S/.test(lines[i + 1])) break;
+      i++;
+    }
+    while (i < lines.length && lines[i] === "") i++;
+    if (i >= lines.length) return null;
+    const dashes = [];
+    while (i < lines.length) {
+      const ln = lines[i];
+      if (!ln.trim()) break;
+      if (!/^\s*-\S/.test(ln)) break;
+      dashes.push(ln);
+      i++;
+    }
+    if (!dashes.length) return null;
+    const dashStart = chunk.indexOf(dashes[0], pe);
+    if (dashStart < 0) return null;
+    const proseSpan = chunk.slice(proseStart, dashStart);
+    let pos = dashStart;
+    for (let k = 0; k < dashes.length; k++) {
+      if (!chunk.startsWith(dashes[k], pos)) return null;
+      pos += dashes[k].length;
+      if (pos < chunk.length && chunk.charAt(pos) === "\r") pos++;
+      if (pos < chunk.length && chunk.charAt(pos) === "\n") pos++;
+    }
+    const dashText = chunk.slice(dashStart, pos);
+    let resumeAt = pos;
+    while (resumeAt < chunk.length && (chunk.charAt(resumeAt) === "\n" || chunk.charAt(resumeAt) === "\r")) {
+      resumeAt++;
+    }
+    return { proseSpan: proseSpan, dashText: dashText, resumeAt: resumeAt };
+  }
+
+  function renderAuditAddFollowingThenRest(parent, chunk, opts) {
+    if (!chunk) return;
+    const matches = [...String(chunk).matchAll(/add\s+the\s+following\s+lines?\b/gi)];
+    if (!matches.length) {
+      renderTextWithDollarShellBlocks(parent, chunk, opts);
+      return;
+    }
+    let last = 0;
+    for (let mi = 0; mi < matches.length; mi++) {
+      const m = matches[mi];
+      const nextAt = mi + 1 < matches.length ? matches[mi + 1].index : chunk.length;
+      if (m.index > last) renderTextWithDollarShellBlocks(parent, chunk.slice(last, m.index), opts);
+      const parsed = consumeAuditFollowingBlock(chunk, m);
+      if (!parsed) {
+        renderTextWithDollarShellBlocks(parent, chunk.slice(m.index, nextAt), opts);
+        last = nextAt;
+        continue;
+      }
+      renderTextWithDollarShellBlocks(parent, parsed.proseSpan, opts);
+      appendPreBlock(parent, parsed.dashText, "rule-shell");
+      last = parsed.resumeAt;
+    }
+    if (last < chunk.length) renderTextWithDollarShellBlocks(parent, chunk.slice(last), opts);
+  }
+
   function renderRichTextChunk(parent, chunk, opts) {
     opts = opts || {};
     const sp = splitOcDebugForNodeLoop(chunk);
     if (sp && sp.prose.trim() && sp.script.trim()) {
-      renderTextWithDollarShellBlocks(parent, sp.prose, opts);
+      renderAuditAddFollowingThenRest(parent, sp.prose, opts);
       appendPreBlock(parent, sp.script, "rule-shell");
       return;
     }
-    renderTextWithDollarShellBlocks(parent, chunk, opts);
+    renderAuditAddFollowingThenRest(parent, chunk, opts);
   }
 
   function extractBalancedJson(s, start) {
