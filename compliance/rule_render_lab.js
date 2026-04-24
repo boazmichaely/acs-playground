@@ -371,7 +371,8 @@
   /**
    * Whole identifiers that are usually infrastructure / API vocabulary and often appear
    * all-lowercase or with hyphens (not covered by PascalCase / camelCase rules).
-   * Includes common daemon names (e.g. chronyd, ntpd) for inline code in any context.
+   * Includes common daemon / service names (auditd, systemd, chronyd, …) for inline code in
+   * any context. Omit ambiguous English (e.g. named, tuned) from this list.
    * Reject `/` or `-` immediately before the match so `kubelet` is not styled inside
    * `/etc/kubernetes/kubelet.conf` or `--kubelet-https`. Same for trailing `-`.
    */
@@ -385,10 +386,22 @@
     "openshift-kube-apiserver",
     "kubelet",
     "apiserver",
+    "audispd",
+    "auditd",
     "chronyd",
     "cri-o",
+    "firewalld",
+    "journald",
+    "logind",
+    "nfs",
     "ntpd",
+    "postfix",
     "runc",
+    "rsyslogd",
+    "sshd",
+    "sssd",
+    "systemd",
+    "vsftpd",
   ];
 
   const INFRA_INLINE_RE = new RegExp(

@@ -249,7 +249,7 @@
 <body>
   <h1>Compliance Operator profiles</h1>
   <p class="meta">
-    Generated: <strong>2026-04-24 00:05 UTC</strong>.
+    Generated: <strong>2026-04-24 00:07 UTC</strong>.
     Source: cluster <code>profiles.compliance.openshift.io</code> in <code>openshift-compliance</code>.
     <strong>Rule set</strong> is <code>len(.rules)</code> on each Profile CR; <strong>Version</strong> is the Profile <code>.version</code> field (same labels as Red Hat ACS schedule UI).
     <strong>Summary</strong> is curated in this generator script (with a trimmed <code>description</code> fallback for unknown profile families).
@@ -669,7 +669,8 @@
   /**
    * Whole identifiers that are usually infrastructure / API vocabulary and often appear
    * all-lowercase or with hyphens (not covered by PascalCase / camelCase rules).
-   * Includes common daemon names (e.g. chronyd, ntpd) for inline code in any context.
+   * Includes common daemon / service names (auditd, systemd, chronyd, …) for inline code in
+   * any context. Omit ambiguous English (e.g. named, tuned) from this list.
    * Reject `/` or `-` immediately before the match so `kubelet` is not styled inside
    * `/etc/kubernetes/kubelet.conf` or `--kubelet-https`. Same for trailing `-`.
    */
@@ -683,10 +684,22 @@
     "openshift-kube-apiserver",
     "kubelet",
     "apiserver",
+    "audispd",
+    "auditd",
     "chronyd",
     "cri-o",
+    "firewalld",
+    "journald",
+    "logind",
+    "nfs",
     "ntpd",
+    "postfix",
     "runc",
+    "rsyslogd",
+    "sshd",
+    "sssd",
+    "systemd",
+    "vsftpd",
   ];
 
   const INFRA_INLINE_RE = new RegExp(
