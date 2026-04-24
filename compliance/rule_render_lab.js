@@ -371,6 +371,7 @@
   /**
    * Whole identifiers that are usually infrastructure / API vocabulary and often appear
    * all-lowercase or with hyphens (not covered by PascalCase / camelCase rules).
+   * Includes common daemon names (e.g. chronyd, ntpd) for inline code in any context.
    * Reject `/` or `-` immediately before the match so `kubelet` is not styled inside
    * `/etc/kubernetes/kubelet.conf` or `--kubelet-https`. Same for trailing `-`.
    */
@@ -384,7 +385,9 @@
     "openshift-kube-apiserver",
     "kubelet",
     "apiserver",
+    "chronyd",
     "cri-o",
+    "ntpd",
     "runc",
   ];
 
