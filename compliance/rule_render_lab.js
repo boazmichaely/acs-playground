@@ -376,13 +376,17 @@
   /**
    * Whole identifiers that are usually infrastructure / API vocabulary and often appear
    * all-lowercase or with hyphens (not covered by PascalCase / camelCase rules).
-   * Includes common daemon / service names (auditd, systemd, chronyd, …) for inline code in
-   * any context. Omit only ambiguous English: named, tuned.
+   * Includes common daemon / service names and stack tools (auditd, iptables, augenrules, …)
+   * for inline code in any context. Omit ambiguous English: named, tuned. Do not rely on
+   * generic “… daemon” prose for additions (often normal English).
    * Reject `/` or `-` immediately before the match so `kubelet` is not styled inside
    * `/etc/kubernetes/kubelet.conf` or `--kubelet-https`. Same for trailing `-`.
    */
   const INFRA_ALLOWLIST = [
+    "aide",
     "apiserver",
+    "augenrules",
+    "auditctl",
     "audispd",
     "auditd",
     "chronyd",
@@ -393,28 +397,40 @@
     "dnsmasq",
     "dockerd",
     "dovecot",
+    "dracut",
+    "fapolicyd",
     "firewalld",
+    "grub2",
     "httpd",
+    "ip6tables",
+    "iptables",
     "irqbalance",
     "journald",
     "kube-apiserver",
     "kubelet",
     "logind",
+    "logrotate",
     "namespace-admin",
     "nfs",
+    "nftables",
     "ntpd",
     "OAuth",
     "oauth",
     "oddjobd",
     "openshift-apiserver",
     "openshift-kube-apiserver",
+    "openvswitch",
+    "polkit",
     "postfix",
     "rpcbind",
     "runc",
     "rsyslogd",
     "sshd",
     "sssd",
+    "sysctl",
+    "syslog-ng",
     "systemd",
+    "systemd-journald",
     "usbguard",
     "vsftpd",
   ];
