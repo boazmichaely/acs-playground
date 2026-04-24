@@ -5,9 +5,17 @@
 (function () {
   "use strict";
 
+  const NL = "\n";
+  const CLS_BLOCK = "rule-block";
+  const CLS_SHELL = "rule-shell";
+  const CLS_JSON = "rule-json";
+  const CLS_YAML = "rule-yaml";
+  const CLS_URI = "rule-uri";
+  const CLS_INLINE = "rule-inline";
+  const CLS_PATH = "rule-path";
+
   function preprocessNumberedGlue(s) {
-    const nl = String.fromCharCode(10);
-    return String(s).replace(/([.!?])(\s+)(\d+)(\.\s+)(?=[A-Z$"'])/g, (_, a, b, c, d) => a + b + nl + c + d);
+    return String(s).replace(/([.!?])(\s+)(\d+)(\.\s+)(?=[A-Z$"'])/g, (_, a, b, c, d) => a + b + NL + c + d);
   }
 
   /**
@@ -16,8 +24,7 @@
    * paragraph and a new <ol>, which resets numbering to 1.
    */
   function preprocessStepAfterDone(s) {
-    const nl = String.fromCharCode(10);
-    return String(s).replace(/\bdone\s+(\d+\.\s+Execute\b)/gi, "done" + nl + "$1");
+    return String(s).replace(/\bdone\s+(\d+\.\s+Execute\b)/gi, "done" + NL + "$1");
   }
 
   /**
@@ -27,10 +34,9 @@
    * Skips list-like "1. [1] https://…" (digit before the period).
    */
   function preprocessCitationLinebreaks(s) {
-    const nl = String.fromCharCode(10);
     return String(s).replace(
       /(?<![0-9])([.!?])([ \t]+)(\[\d{1,3}\])(\s*)(https?:\/\/\S+|ftp:\/\/\S+)/gi,
-      (_, punct, _spBefore, cite, spAfter, url) => punct + nl + nl + cite + spAfter + url
+      (_, punct, _spBefore, cite, spAfter, url) => punct + NL + NL + cite + spAfter + url
     );
   }
 
@@ -67,10 +73,9 @@
    * Boilerplate before recipe lines: auditctl (-a / -w …) or simple config assignments (KEY = VAL).
    * Phrases are catalog-driven (see maintenance scan); extend the alternation for new wording only.
    */
-  const AUDIT_ADD_LINE_PHRASE_RE_GI =
-    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|use\s+following\s+lines\b|add\s+the\s+line\s+to\b|add\s+the\s+rule\s+to\b|add\s+the\s+lines\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b|(?<!or\s)modify\s+the\s+following\s+lines?\b|the\s+following\s+audit\s+rules?\b|the\s+following\s+line\s+structure\b)/gi;
-  const AUDIT_ADD_LINE_PHRASE_RE_I =
-    /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|use\s+following\s+lines\b|add\s+the\s+line\s+to\b|add\s+the\s+rule\s+to\b|add\s+the\s+lines\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b|(?<!or\s)modify\s+the\s+following\s+lines?\b|the\s+following\s+audit\s+rules?\b|the\s+following\s+line\s+structure\b)/i;
+  const AUDIT_ADD_LINE_PHRASE_RE = /(?:add\s+the\s+following\s+lines?\b|add\s+or\s+modify\s+the\s+following\s+lines?\b|use\s+the\s+following\s+lines?\b|use\s+following\s+lines\b|add\s+the\s+line\s+to\b|add\s+the\s+rule\s+to\b|add\s+the\s+lines\s+to\b|add\s+a\s+line\s+of\s+the\s+following\s+form\b|add\s+the\s+rules\s+below\b|see\s+an\s+example\s+of\s+multiple\s+combined\s+system\s+calls\b|(?<!or\s)modify\s+the\s+following\s+lines?\b|the\s+following\s+audit\s+rules?\b|the\s+following\s+line\s+structure\b)/;
+  const AUDIT_ADD_LINE_PHRASE_RE_GI = new RegExp(AUDIT_ADD_LINE_PHRASE_RE.source, "gi");
+  const AUDIT_ADD_LINE_PHRASE_RE_I = new RegExp(AUDIT_ADD_LINE_PHRASE_RE.source, "i");
 
   /** auditd.conf-style assignment after a caption (catalog uses simple keys and placeholders). */
   const AUDIT_RECIPE_CONF_ASSIGN = /^\s*[A-Za-z0-9_.]+\s*=\s*\S/;
@@ -163,7 +168,7 @@
         continue;
       }
       renderTextWithDollarShellBlocks(parent, parsed.proseSpan, opts);
-      appendPreBlock(parent, parsed.dashText, "rule-shell");
+      appendPreBlock(parent, parsed.dashText, CLS_SHELL);
       last = parsed.resumeAt;
     }
     if (last < chunk.length) renderTextWithDollarShellBlocks(parent, chunk.slice(last), opts);
@@ -174,7 +179,7 @@
     const sp = splitOcDebugForNodeLoop(chunk);
     if (sp && sp.prose.trim() && sp.script.trim()) {
       renderAuditAddFollowingThenRest(parent, sp.prose, opts);
-      appendPreBlock(parent, sp.script, "rule-shell");
+      appendPreBlock(parent, sp.script, CLS_SHELL);
       return;
     }
     renderAuditAddFollowingThenRest(parent, chunk, opts);
@@ -331,7 +336,7 @@
 
   function appendPreBlock(container, text, cls) {
     const pre = document.createElement("pre");
-    pre.className = "rule-block " + (cls || "");
+    pre.className = CLS_BLOCK + " " + (cls || "");
     const code = document.createElement("code");
     code.textContent = text;
     pre.appendChild(code);
@@ -536,7 +541,7 @@
         try {
           const parsed = JSON.parse(oneLine);
           if (!isTrivialCitationJson(oneLine)) {
-            appendPreBlock(parent, JSON.stringify(parsed, null, 2), "rule-json");
+            appendPreBlock(parent, JSON.stringify(parsed, null, 2), CLS_JSON);
             return;
           }
         } catch (_) {}
@@ -552,7 +557,7 @@
       const mid = t.slice(last, idx + pre.length);
       if (mid) parent.appendChild(document.createTextNode(mid));
       const code = document.createElement("code");
-      code.className = "rule-path";
+      code.className = CLS_PATH;
       code.textContent = path;
       parent.appendChild(code);
       last = idx + pre.length + path.length;
@@ -568,6 +573,16 @@
     return new RegExp(ABSOLUTE_URI_RE.source, ABSOLUTE_URI_RE.flags);
   }
 
+  function appendRuleUri(parent, url) {
+    const a = document.createElement("a");
+    a.className = CLS_URI;
+    a.href = url;
+    a.rel = "noopener noreferrer";
+    a.target = "_blank";
+    a.textContent = url;
+    parent.appendChild(a);
+  }
+
   function appendUriAndPaths(parent, rawChunk) {
     if (!rawChunk) return;
     let pos = 0;
@@ -575,14 +590,7 @@
     const uriScan = absoluteUriMatcher();
     while ((m = uriScan.exec(rawChunk)) !== null) {
       appendPathsOnly(parent, rawChunk.slice(pos, m.index));
-      const url = m[1];
-      const a = document.createElement("a");
-      a.className = "rule-uri";
-      a.href = url;
-      a.rel = "noopener noreferrer";
-      a.target = "_blank";
-      a.textContent = url;
-      parent.appendChild(a);
+      appendRuleUri(parent, m[1]);
       pos = m.index + m[0].length;
     }
     appendPathsOnly(parent, rawChunk.slice(pos));
@@ -619,7 +627,7 @@
       for (const seg of pathPieces) {
         if (seg.t === "path") {
           const pc = document.createElement("code");
-          pc.className = "rule-path";
+          pc.className = CLS_PATH;
           pc.textContent = seg.s;
           parent.appendChild(pc);
           continue;
@@ -650,7 +658,7 @@
         for (const p of parts) {
           if (p.t === "code") {
             const c = document.createElement("code");
-            c.className = "rule-inline";
+            c.className = CLS_INLINE;
             c.textContent = p.s;
             parent.appendChild(c);
           } else {
@@ -666,14 +674,7 @@
     const uriScan = absoluteUriMatcher();
     while ((um = uriScan.exec(full)) !== null) {
       if (um.index > pos) emitInlinedText(full.slice(pos, um.index));
-      const url = um[1];
-      const a = document.createElement("a");
-      a.className = "rule-uri";
-      a.href = url;
-      a.rel = "noopener noreferrer";
-      a.target = "_blank";
-      a.textContent = url;
-      parent.appendChild(a);
+      appendRuleUri(parent, um[1]);
       pos = um.index + um[0].length;
     }
     if (pos < full.length) emitInlinedText(full.slice(pos));
@@ -686,12 +687,11 @@
    * (same family as `for node in …`), not inline variable-style code.
    */
   function renderTextWithDollarShellBlocks(parent, chunk, opts) {
-    const nl = String.fromCharCode(10);
-    const lines = String(chunk).split(/\n/);
+    const lines = String(chunk).split(/\r?\n/);
     let buf = [];
     function flushBuf() {
       if (!buf.length) return;
-      const sub = buf.join(nl);
+      const sub = buf.join(NL);
       if (sub.trim()) {
         const wrap = document.createElement("span");
         applyInlineCodeThenUriPath(wrap, sub, opts);
@@ -703,7 +703,7 @@
       const line = lines[i];
       if (DOLLAR_SHELL_LINE_TEST.test(line)) {
         flushBuf();
-        appendPreBlock(parent, line.trim(), "rule-shell");
+        appendPreBlock(parent, line.trim(), CLS_SHELL);
       } else {
         buf.push(line);
       }
@@ -712,7 +712,6 @@
   }
 
   function renderProseBlock(container, text) {
-    const nl = String.fromCharCode(10);
     const lines = text.split(/\n/);
     let li = 0;
     while (li < lines.length) {
@@ -759,7 +758,7 @@
       if (buf.length) {
         const div = document.createElement("div");
         div.className = "rule-desc-para";
-        renderRichTextChunk(div, buf.join(nl));
+        renderRichTextChunk(div, buf.join(NL));
         container.appendChild(div);
       }
     }
@@ -776,13 +775,7 @@
         const p = document.createElement("p");
         p.className = "rule-desc-para";
         p.appendChild(document.createTextNode("[" + m[1] + "] "));
-        const a = document.createElement("a");
-        a.href = m[2];
-        a.className = "rule-uri";
-        a.rel = "noopener noreferrer";
-        a.target = "_blank";
-        a.textContent = m[2];
-        p.appendChild(a);
+        appendRuleUri(p, m[2]);
         container.appendChild(p);
       }
       return;
@@ -796,9 +789,9 @@
         const rest = para.slice(ext[0]).trim();
         if (rest === "" && !isTrivialCitationJson(ext[1])) {
           try {
-            appendPreBlock(container, JSON.stringify(JSON.parse(ext[1]), null, 2), "rule-json");
+            appendPreBlock(container, JSON.stringify(JSON.parse(ext[1]), null, 2), CLS_JSON);
           } catch (_) {
-            appendPreBlock(container, ext[1], "rule-json");
+            appendPreBlock(container, ext[1], CLS_JSON);
           }
           return;
         }
@@ -808,7 +801,7 @@
     const y = splitYamlIsland(para);
     if (y) {
       if (y.before.trim()) renderProseBlock(container, y.before);
-      appendPreBlock(container, y.yaml.trimEnd(), "rule-yaml");
+      appendPreBlock(container, y.yaml.trimEnd(), CLS_YAML);
       if (y.after.trim()) renderParagraphChunk(container, y.after);
       return;
     }
@@ -817,9 +810,9 @@
     if (jlike) {
       if (jlike.before.trim()) renderProseBlock(container, jlike.before);
       try {
-        appendPreBlock(container, JSON.stringify(JSON.parse(jlike.snippet), null, 2), "rule-json");
+        appendPreBlock(container, JSON.stringify(JSON.parse(jlike.snippet), null, 2), CLS_JSON);
       } catch (_) {
-        appendPreBlock(container, jlike.snippet, "rule-json");
+        appendPreBlock(container, jlike.snippet, CLS_JSON);
       }
       if (jlike.after.trim()) renderParagraphChunk(container, jlike.after);
       return;
@@ -827,14 +820,14 @@
 
     const trimmedPara = para.trim();
     if (/^oc\s+/i.test(trimmedPara) && trimmedPara.length >= 50 && !/\n/.test(trimmedPara)) {
-      appendPreBlock(container, trimmedPara, "rule-shell");
+      appendPreBlock(container, trimmedPara, CLS_SHELL);
       return;
     }
     if (/^oc patch$/i.test(trimmedPara)) {
       const p = document.createElement("p");
       p.className = "rule-desc-para";
       const c = document.createElement("code");
-      c.className = "rule-inline";
+      c.className = CLS_INLINE;
       c.textContent = trimmedPara;
       p.appendChild(c);
       container.appendChild(p);
@@ -845,9 +838,9 @@
     if (jn) {
       if (jn.before.trim()) renderProseBlock(container, jn.before);
       try {
-        appendPreBlock(container, JSON.stringify(JSON.parse(jn.json), null, 2), "rule-json");
+        appendPreBlock(container, JSON.stringify(JSON.parse(jn.json), null, 2), CLS_JSON);
       } catch (_) {
-        appendPreBlock(container, jn.json, "rule-json");
+        appendPreBlock(container, jn.json, CLS_JSON);
       }
       if (jn.after.trim()) renderParagraphChunk(container, jn.after);
       return;
@@ -863,7 +856,6 @@
    */
   function mergeAdjacentAuditParagraphs(paras) {
     const out = [];
-    const nl = String.fromCharCode(10);
     function firstNonEmptyLine(s) {
       const lines = String(s).split(/\n/);
       for (let j = 0; j < lines.length; j++) {
@@ -880,7 +872,7 @@
       let cur = paras[i];
       i++;
       while (i < paras.length && AUDIT_ADD_LINE_PHRASE_RE_I.test(cur) && startsRecipeContinuation(paras[i])) {
-        cur = cur.trimEnd() + nl + paras[i].trimStart();
+        cur = cur.trimEnd() + NL + paras[i].trimStart();
         i++;
       }
       out.push(cur);
