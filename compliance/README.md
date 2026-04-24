@@ -1,257 +1,127 @@
-# Compliance profiles viewer & rule description lab
+# Compliance profiles: a readable snapshot of OpenShift rules
 
-This directory contains **offline tooling** around the **OpenShift Compliance Operator**: pull Profile and Rule custom resources from a cluster (or stdin), bake them into a **single interactive HTML file**, and optionally render long **Rule CR descriptions** with structure (audit recipes, shell snippets, links) instead of a plain wall of text.
+If you work with **OpenShift compliance profiles**—CIS, STIG, PCI, and the rest—you have probably opened a profile or a rule in the cluster and been handed a **very long block of text**. Steps, audit commands, file paths, and links run together. It is hard to scan, hard to brief someone else on, and awkward to review in a meeting.
 
-The README is written **top-down**: overview and behavior first, then data, then rendering concepts, then files and knobs, then how this could relate to **RHACS** (StackRox) compliance UI. Later sections stay useful even if upstream integration work pauses.
-
----
-
-## Table of contents
-
-1. [What this does](#1-what-this-does)
-2. [How it operates (end-to-end)](#2-how-it-operates-end-to-end)
-3. [Data: where it lives and how it is organized](#3-data-where-it-lives-and-how-it-is-organized)
-4. [Rendering: what the “magic” is](#4-rendering-what-the-magic-is)
-5. [Implementation: files, tweaks, and the lab](#5-implementation-files-tweaks-and-the-lab)
-6. [Adopting this rendering in RHACS (frontend-focused, phased)](#6-adopting-this-rendering-in-rhacs-frontend-focused-phased)
-7. [Git backup / tags](#7-git-backup--tags)
-8. [Open questions (for the authors)](#8-open-questions-for-the-authors)
+This folder holds a small **offline report** that fixes that experience. You get a normal web page you can open from your laptop: **profiles in a table**, **plain-language summaries**, and—when you drill in—**rule guidance that is formatted for humans**, not for a database field.
 
 ---
 
-## 1. What this does
+## What you can do with it
 
-| Deliverable | Purpose |
-|-------------|---------|
-| **`generate_compliance_profiles_html.py`** | Fetches **profiles** and **rules** from the cluster (via `oc`), builds JSON rows, emits one **self-contained HTML** page: sortable/filterable profile table, expandable profile text, expandable per-profile **rules** grid with rule detail pane. |
-| **`rule_render_lab.js`** (+ **`rule_render_lab.css`**) | **Description renderer**: turns a Rule CR’s free-form `description` string into DOM (paragraphs, lists, monospace blocks for audit lines, inline code for paths/commands, links for URLs). |
-| **Lab build scripts** | **`extract_rule_render_lab_fixture.py`** pulls a small JSON fixture from generated HTML; **`build_rule_render_lab.py`** stitches fixture + CSS + JS into **`rule_render_lab.html`** for quick iteration **without** the cluster. |
+- **Browse every compliance profile** the cluster exposes, with filters and sorting, the way you would in a spreadsheet.
+- **Open a profile** to read its official title and description without clicking through the console.
+- **See how many rules** sit under each profile and **open the list** for that profile.
+- **Expand a single rule** to read its full guidance with **headings, steps, lists**, and **commands shown in a separate, easy-to-copy block** where that makes sense.
+- **Adjust how much of the rule list fits on screen** using the resize control under the table (your preference can be remembered on that machine).
+- **Work offline**: once the page exists, it does not phone home to the cluster. You can archive it, attach it to a ticket, or walk through it in a readout.
 
-There is **no server**: open the HTML in a browser (`file://` works). Everything is embedded (data + script + optional renderer).
-
----
-
-## 2. How it operates (end-to-end)
-
-High-level steps **when you run the generator against a live cluster**:
-
-1. **`oc get profiles.compliance.openshift.io -n <ns> -o json`**  
-   Collect every Profile CR. For each profile, keep metadata and the **`rules`** list (rule **names** referencing Rule CRs).
-
-2. **`oc get rules.compliance.openshift.io -n <ns> -o json`**  
-   Build a **rule catalog**: map `metadata.name` → `{ title, description, severity }`.  
-   This can be **large** (hundreds/thousands of rules); the HTML embeds the full catalog for offline expansion.
-
-3. **Python shaping (`build_rows`)**  
-   Normalizes each profile into a row object: counts, applicability from annotations, human **summary** line (heuristic `summarize()` in the script), full title/description text, ordered **`ruleNames`**.
-
-4. **HTML template assembly**  
-   - Injects **`#profile-data`**: JSON `{ profiles, ruleCatalog }` (escaped for HTML).  
-   - Injects **`rule_render_lab.js`** at build time in place of a sentinel token (see §5).  
-   - Client-side JS in the template drives tables, filters, column resize, expand/collapse, and calls **`renderRuleDescriptionRich(container, description)`** when a rule row is expanded.
-
-5. **Browser**  
-   Parses JSON once, renders the UI entirely in JS. **No follow-up cluster calls.**
-
-**stdin path (`--stdin`)**: supply Profile list JSON only; rule catalog will be empty unless you extend the pipeline. **`--skip-rules`**: faster/smaller HTML; rule detail shows “missing catalog”.
+None of this replaces the Compliance Operator or your cluster settings. It is a **read-only mirror** of what the API already says—presented so that product, GRC, or platform folks can actually use it.
 
 ---
 
-## 3. Data: where it lives and how it is organized
+## How you get your copy
 
-### 3.1 Source of truth (cluster)
+Someone who can reach the cluster (usually an engineer with the `oc` command-line tool and permission to read the compliance namespace) runs **one small script** that lives in this folder. The script asks OpenShift for the same profile and rule records the console would show, then **writes a single HTML file**.
 
-| Kubernetes kind | Namespace (default) | Used fields |
-|-----------------|----------------------|-------------|
-| `profiles.compliance.openshift.io` | `openshift-compliance` (configurable `-n`) | `metadata.name`, `title`, `description`, `version`, `rules[]`, product annotations |
-| `rules.compliance.openshift.io` | same | `metadata.name`, `title`, `description`, `severity` |
+That file is your **snapshot**. Open it in Chrome, Firefox, or Safari like any downloaded report. You do not install a server or sign into the cluster again to read it.
 
-### 3.2 Inside generated HTML (`#profile-data`)
+If you are the person running the export, the exact command names live in **Appendix A** at the bottom of this document. Everyone else only needs the finished HTML.
 
-Single JSON object (see generator: `payload = {"profiles": rows, "ruleCatalog": catalog}`):
+---
 
-- **`profiles`**: array of profile objects, each including **`ruleNames`** (ordered rule ids for that profile).
-- **`ruleCatalog`**: object keyed by rule id; values hold **`title`**, **`description`** (long prose + recipes), **`severity`**.
+## Why the rule text finally reads well
 
-Everything is **flat JSON** embedded in a `<script type="application/json" id="profile-data">` block so the page works offline.
+Compliance rules ship as **one long string** per rule. Authors mix story, numbered steps, “add these lines to your audit config,” shell snippets, paths, and URLs. A typical tool either shows that as a single paragraph or dumps it all in monospace. Neither is pleasant.
 
-### 3.3 Lab fixtures (JSON on disk)
+Here, the page applies a set of **careful reading rules** (developed against real rule text from common profiles):
+
+1. **Cleanup** — harmless junk at the start of a field is removed; odd line breaks around steps or footnotes are normalized so steps stay in order.
+2. **Structure** — blank lines and numbering are interpreted so you get real paragraphs and real lists instead of one slab of text.
+3. **Commands and recipes** — when the text says, in effect, “add the following lines,” the following **audit-style lines** (the ones starting with `-` that many admins recognize) are grouped into a **fixed-width block** so they read like a recipe card, not like prose.
+4. **Paths and links** — file paths and URLs are picked out so links are clickable and paths are easy to spot.
+5. **Shell snippets** — short scripts (for example loops that use `oc`) can be broken out so the English explanation stays readable and the script stays copy-pasteable.
+
+The same ideas could later power **in-product** experiences (for example in RHACS) where check descriptions today are still mostly plain text. **Appendix B** sketches that path for engineering partners.
+
+---
+
+## Where the information lives (before and after the snapshot)
+
+**On the cluster**, OpenShift stores compliance definitions as **Kubernetes objects**. Think of two layers:
+
+- **Profiles** — the named bundles you hear about in sales and audits (“CIS on the nodes,” “STIG for the platform,” and so on). Each profile carries metadata, a human description, and a **ordered list of rule names** that belong to it.
+- **Rules** — the individual checks. Each has a name, a title, a severity, and that **long description** string described above.
+
+**In the snapshot file**, everything you need is **bundled together** so the page works on an airplane:
+
+- A **roster of profiles** with the fields you would want in a review (name, applicability, counts, short summary line, full text when expanded).
+- A **library of rules** keyed by name, so when you expand “rule 37 of 200” the text is already there—no second round trip to the cluster.
+
+That design is what makes the file large sometimes: popular clusters ship **hundreds or thousands** of rules, and the snapshot includes the text for all of them so any profile can be explored fully offline.
+
+---
+
+## The “lab” (what it is, in one minute)
+
+While the formatting rules were being invented and tested, engineers used a **tiny side page** with a handful of sample rules—the **rule render lab**. It starts fast, shows before/after, and makes it obvious when a new phrase in the wild breaks the heuristics.
+
+The important point for everyone else: **the lab and the big profile report share the same formatter.** Tuning happened in the lab; the **finished behavior** is what you see when you open the full HTML export. You do not need to open the lab to use the product of this folder.
+
+---
+
+## Who this is for
+
+- **Product and program managers** reviewing what OpenShift actually promises in a profile.
+- **Customer-facing teams** preparing readouts or comparisons without live cluster access.
+- **Engineers** who already live in `oc` but want a **shareable artifact** for peers who do not.
+
+---
+
+## Appendix A — For engineers: what is in the folder and how it is built
 
 | File | Role |
 |------|------|
-| **`lab-multi-profile-rules.json`** | Default multi-profile bundle for **`build_rule_render_lab.py`**: `{ "profiles": [ { "profile", "rules": [ { id, title, description } ] } ] }`. |
-| **`lab-ocp4-*.json`** | Older/smaller fixtures (optional). |
+| `generate_compliance_profiles_html.py` | Fetches profiles and rules via `oc`, shapes rows (including heuristic one-line summaries), emits one self-contained HTML page. Embeds the rule formatter script at build time. |
+| `rule_render_lab.js` | Implements the description pipeline (preprocess → blocks → structured output). |
+| `rule_render_lab.css` | Styles for the lab page; key rules are mirrored in the generated HTML for matching appearance. |
+| `extract_rule_render_lab_fixture.py` | Pulls a small multi-profile fixture out of an existing generated HTML file (reads embedded profile JSON). |
+| `build_rule_render_lab.py` | Builds `rule_render_lab.html` from a fixture + CSS + JS for fast iteration. |
+| `lab-*.json` | Saved samples used by the lab builder. |
 
-Fixtures are **not** fetched at lab runtime; they are snapshots for **renderer development**.
+**Build flow (cluster):** `oc get profiles …` → `oc get rules …` → Python normalizes data → HTML template written with embedded JSON (`profile-data`) plus client-side UI logic → formatter script pasted in from `rule_render_lab.js` → single output file.
 
-### 3.4 Git policy (repo root `.gitignore`)
+**Lab flow:** adjust `rule_render_lab.js` / `.css` → run `build_rule_render_lab.py` → refresh `rule_render_lab.html` → when happy, rerun the main script so the big export picks up the same JS.
 
-Generated HTML such as **`profiles-from-cluster.html`**, **`profiles-short-summaries.html`**, and **`rule_render_lab.html`** is typically **gitignored** so large, machine-specific blobs do not land in git. **What is versioned** is the **generator + renderer source**; anyone can recreate HTML locally.
+**Tweaks:** profile summary lines → `summarize()` in the Python script. Description grammar → `rule_render_lab.js`. Table chrome (columns, filters, rules pane height behavior) → inline style/script in the Python template.
 
----
+Generated HTML outputs are usually **gitignored**; source files in this directory are what you version and reuse.
 
-## 4. Rendering: what the “magic” is
-
-Rule descriptions are **one string** in the CR. Authors mix narrative steps, numbered lists, auditctl lines (`-a` / `-w`), shell loops, file paths, URLs, and occasional structured fragments. A naïve UI shows that as wrapped monospace or a single paragraph.
-
-This lab’s renderer (`rule_render_lab.js`) applies a **pipeline**:
-
-1. **Preprocess** (string in → string out)  
-   Examples: strip leading YAML chaff (`-|`), normalize “done 2.” step boundaries, split citation markers from URLs, normalize newlines.
-
-2. **Split into coarse blocks**  
-   Blank-line-separated chunks become candidate **paragraphs** (or merged where audit boilerplate was split from the recipe lines that follow).
-
-3. **Paragraph-level intelligence**  
-   - Detect **Markdown-ish** bullets / numbering.  
-   - Detect **URLs** and **file paths** for links or `<code>`.  
-   - Detect **“add the following line(s)”**-style captions and pull following **`-a` / `-w` lines** (and some **`KEY = value`** auditd-style lines) into a single **monospace block** (`.rule-shell`).  
-   - Detect **shell / oc debug** loops after colons, etc.
-
-4. **DOM assembly**  
-   Append `<p>`, `<ol>`, `<ul>`, `<pre class="rule-shell">`, spans with classes for inline tokens, etc. The profile HTML uses the same classes in its embedded CSS so the look matches the lab.
-
-**Contract for reuse**: at the end of the IIFE, the script assigns:
-
-```js
-globalThis.renderRuleDescriptionRich = renderDescription;
-```
-
-The generator’s inline UI calls that function if present; otherwise it falls back to plain `textContent`.
-
----
-
-## 5. Implementation: files, tweaks, and the lab
-
-### 5.1 File map
-
-| Path | Responsibility |
-|------|------------------|
-| **`generate_compliance_profiles_html.py`** | `oc` fetch, row building, `summarize()`, HTML shell, embedded profile UI JS/CSS, sentinel injection of **`rule_render_lab.js`**. |
-| **`rule_render_lab.js`** | All description parsing/rendering; exports **`renderRuleDescriptionRich`**. |
-| **`rule_render_lab.css`** | Lab page styling; profile HTML duplicates key rules under **`.rule-detail-body`** for consistency. |
-| **`extract_rule_render_lab_fixture.py`** | Reads **`#profile-data`** from a generated HTML file, extracts selected profiles + catalog slice → **`lab-multi-profile-rules.json`**. |
-| **`build_rule_render_lab.py`** | Produces **`rule_render_lab.html`**: embeds fixture JSON, CSS, JS → one file for rapid refresh. |
-| **`lab-*.json`** | Fixture data; safe to regenerate from cluster HTML. |
-
-### 5.2 Where to tweak things
-
-| Goal | Where |
-|------|--------|
-| Profile **summary** one-liner heuristics | **`summarize()`** in **`generate_compliance_profiles_html.py`** |
-| Columns, filters, rules grid **layout**, resize bar, **localStorage** key for rules pane height | HTML shell **`<style>`** + **`mountRulesGrid`** / related JS in same file |
-| **Rule description** grammar (new boilerplate phrases, new block types) | **`rule_render_lab.js`** (regexes, `consumeAuditFollowingBlock`, lists, preprocessors) |
-| **Visual** polish for rendered descriptions in **both** lab and profiles HTML | Prefer **`rule_render_lab.css`** for lab; mirror critical selectors into the generator’s **`.rule-detail-body …`** rules (or refactor to shared CSS file later) |
-| Sentinel / bundled JS file name | Top of **`generate_compliance_profiles_html.py`** (`RULE_RENDERER_*` constants) |
-
-### 5.3 Why the lab exists (and why it confuses newcomers)
-
-There are **two surfaces**:
-
-| Surface | Input | Output | Typical loop |
-|---------|--------|--------|----------------|
-| **Profiles HTML** (generator) | Live cluster or stdin | Large **`profiles-*.html`** with full catalog | Change renderer → rerun **generator** (embeds fresh `rule_render_lab.js`) → refresh |
-| **Rule render lab** | Small **fixture JSON** | **`rule_render_lab.html`** | Edit **`rule_render_lab.js`** / **`.css`** → **`build_rule_render_lab.py`** → refresh |
-
-**Mental model:** **`rule_render_lab.js` is the single source of truth** for description rendering. The lab exists so you can iterate in **seconds** on real-ish text without `oc`, without multi‑MB HTML, and with **raw JSON drawers** per rule for debugging. The generator **copies** that JS into the big HTML at build time.
-
-**Common pitfall:** editing only **`rule_render_lab.html`** or a generated **`profiles-*.html`** in the editor. Those are **outputs**; changes get overwritten. Edit **`rule_render_lab.js`** (and/or the generator template), then rebuild the artifact you open in the browser.
-
----
-
-## 6. Adopting this rendering in RHACS (frontend-focused, phased)
-
-RHACS (StackRox) **Compliance 2.0** UI is a **React + PatternFly** app under **`ui/apps/platform`**. Compliance **coverage** routes and **scan schedules** live under **`Containers/ComplianceEnhanced/`**. This section is **incremental**: each phase is useful on its own if later phases stall.
-
-> **Note:** A request to the demo Central URL from an automated environment returned **HTTP 500** (no session / server-side). When live UI access is available, validate assumptions against the running app. **Fallback** is always the public **`stackrox/stackrox`** tree on GitHub.
-
-### Phase 0 — Map RHACS UI to data (no new renderer yet)
-
-**Goal:** Know which API field equals the Rule CR `description` you already handle.
-
-- **Coverage / checks:** routes are defined in  
-  **`ui/apps/platform/src/Containers/ComplianceEnhanced/Coverage/compliance.coverage.routes.ts`**  
-  (`…/profiles/:profileName/checks`, `…/checks/:checkName`, etc.).
-- **Check detail content:** today, check **`description`** (and rationale, instructions, …) are rendered largely as **plain text** inside PatternFly **`DescriptionList`** in  
-  **`…/Coverage/components/CheckDetailsInfo.tsx`**  
-  (e.g. `{description}` without rich formatting).
-- **Schedules:** wizard and detail views under  
-  **`…/ComplianceEnhanced/Schedules/`** (`compliance.scanConfigs.routes.ts`, wizard components).
-
-**Outcome of phase 0:** a short internal note listing **GraphQL/REST** service + TypeScript types for **`ComplianceCheckResult`** (see imports in `CheckDetailsInfo.tsx`) and which string field should pass through the rich renderer.
-
-### Phase 1 — Isolate a “rich description” component (RHACS repo)
-
-**Goal:** One React component that accepts **`description: string`** (and maybe `className`) and renders PatternFly-safe DOM.
-
-- Port **logic** from **`rule_render_lab.js`** to **TypeScript** (or wrap the existing IIFE bundle in a `useEffect` + ref container if you want a thin first step—tradeoffs: CSP, bundle size, typing).
-- Prefer **explicit DOM** or a minimal internal builder (same as today) over `dangerouslySetInnerHTML` unless you add a **sanitization** pass.
-- Unit tests: snapshot a handful of **real** description strings from fixtures (`lab-multi-profile-rules.json` or exported from cluster).
-
-**Exit criteria:** Storybook (or unit tests) shows improved layout for representative checks without touching routing yet.
-
-### Phase 2 — Wire into check details only
-
-**Goal:** Replace or augment the **`Description`** `DescriptionListDescription` content in **`CheckDetailsInfo.tsx`** with the rich component **when** the string looks “complex” or unconditionally if product agrees.
-
-- Watch for **accessibility**: headings hierarchy, list semantics, keyboard focus inside expanded regions.
-- Watch for **performance**: very long descriptions should not block main thread (chunking, `requestIdleCallback`, or virtualize if needed—usually unnecessary if DOM size is modest).
-
-### Phase 3 — Tables, lists, and consistency
-
-**Goal:** Same rendering for description snippets in **tables** (e.g. profile checks list) if those cells show truncated text with expand behavior—align truncation/expansion UX with the rest of the app.
-
-Relevant files to inspect (names from upstream tree): **`ProfileChecksPage.tsx`**, **`ProfileChecksTable.tsx`**, **`CheckDetailsPage.tsx`**.
-
-### Phase 4 — Product hardening
-
-- **Security:** treat descriptions as **untrusted**; align with platform **CSP** (inline styles, `eval`, third-party scripts).
-- **i18n / theming:** classnames vs PatternFly tokens; dark mode.
-- **Bundle size:** tree-shake helpers; lazy-load heavy grammar if the port grows.
-
-### Phase 5 — Backend / API (optional, non-frontend)
-
-Only if the UI needs **prestructured** fields (separate rationale vs recipe): consider API/schema changes **after** the frontend proves value with the current string-only contract.
-
----
-
-## 7. Git backup / tags
-
-Meaningful UI work on the profiles viewer + resize interaction was captured in git with tag **`compliance-profiles-html-ui`** (annotated). The versioned artifact is **`generate_compliance_profiles_html.py`** plus **`rule_render_lab.js`**; regenerate HTML as needed.
-
----
-
-## 8. Open questions (for the authors)
-
-These are worth answering when someone picks up RHACS integration:
-
-1. **Target product surface:** check details only, or also **scan result** tables, **PDF**/email exports, etc.?
-2. **Trust model:** is rich HTML (DOM) acceptable, or must output remain **Markdown → safe HTML** with a sanitizer?
-3. **Parity:** should **ACS Console** (OpenShift) compliance views share the same component library as **Central** UI?
-4. **Fixture refresh:** who owns periodic refresh of **`lab-multi-profile-rules.json`** from real clusters (and which profiles are canonical)?
-
----
-
-## Quick commands (reference)
+**Commands:**
 
 ```bash
-# Full profiles HTML (cluster; includes rule catalog)
 ./generate_compliance_profiles_html.py -o profiles-from-cluster.html
-
-# Lab fixture from an existing generated HTML file
 python3 extract_rule_render_lab_fixture.py --html profiles-short-summaries.html -o lab-multi-profile-rules.json
-
-# Standalone lab HTML
 python3 build_rule_render_lab.py --fixture lab-multi-profile-rules.json
 ```
 
+**Git note:** UI work on the profiles viewer and rules-pane resize was tagged `compliance-profiles-html-ui`.
+
 ---
 
-## Demo URLs (manual verification)
+## Appendix B — Toward RHACS (StackRox) in-product descriptions
 
-When logged into Central in a browser:
+RHACS Central today shows compliance check detail largely as **plain text** in PatternFly description lists (see upstream `CheckDetailsInfo.tsx` under `ui/apps/platform/src/Containers/ComplianceEnhanced/Coverage/`). A practical rollout sequence:
 
-- **Schedules:** `https://central-stackrox.apps.bm-customer-demo.ocp.infra.rox.systems/main/compliance/schedules`
-- **Coverage checks (example profile):** `https://central-stackrox.apps.bm-customer-demo.ocp.infra.rox.systems/main/compliance/coverage/profiles/ocp4-cis/checks`
+1. **Confirm the field** — Ensure the API string you want to beautify maps to the same “long description” concept as OpenShift Rule CR text.
+2. **Component first** — Port or wrap the formatter behind a single UI component with tests on real strings.
+3. **Wire check details** — Swap or augment the description row in check detail views.
+4. **Spread where useful** — Tables, exports, and accessibility review as product scope allows.
+5. **Harden** — Security review (treat text as untrusted), CSP, i18n, bundle size.
 
-If automated fetch fails, use **browser devtools** + **stackrox/stackrox** sources as described in §6.
+Demo URLs (require a live Central session):  
+`https://central-stackrox.apps.bm-customer-demo.ocp.infra.rox.systems/main/compliance/schedules`  
+`https://central-stackrox.apps.bm-customer-demo.ocp.infra.rox.systems/main/compliance/coverage/profiles/ocp4-cis/checks`
+
+---
+
+*Earlier draft of this README preserved as `README.disaster` for comparison.*
