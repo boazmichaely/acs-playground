@@ -326,13 +326,59 @@ HTML_SHELL = """<!DOCTYPE html>
       color: #3f3f46;
       padding: 0.35rem 0;
     }}
-    details.rules-details .wrap {{
+    /* Rules list: inner scroll + visible drag bar (CSS resize is unreliable here / hidden by scrollbar) */
+    .wrap.rules-grid-panel {{
       margin-top: 0.4rem;
-      max-height: 20rem;
-      overflow: auto;
+      overflow: visible;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      box-sizing: border-box;
+    }}
+    .rules-grid-scroll {{
+      overflow-x: auto;
+      overflow-y: auto;
+      box-sizing: border-box;
       width: 100%;
       min-width: 0;
+      min-height: 200px;
+      height: 520px;
+      max-height: 82vh;
+    }}
+    .rules-grid-scroll table.data-grid {{
+      height: auto;
+    }}
+    .rules-grid-resizer {{
+      flex: 0 0 auto;
+      height: 14px;
+      margin-top: 3px;
+      border-radius: 4px;
+      background: #e4e4e7;
+      cursor: ns-resize;
+      touch-action: none;
+      user-select: none;
       box-sizing: border-box;
+      border: 1px solid #d4d4d8;
+      position: relative;
+    }}
+    .rules-grid-resizer::before {{
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 3px;
+      border-radius: 2px;
+      background: repeating-linear-gradient(
+        90deg,
+        #71717a 0 2px,
+        transparent 2px 6px
+      );
+    }}
+    .rules-grid-resizer:hover {{
+      background: #d4d4d8;
+      border-color: #a1a1aa;
     }}
     details.rules-details table.data-grid {{
       width: 100%;
@@ -347,16 +393,22 @@ HTML_SHELL = """<!DOCTYPE html>
       padding: 0.45rem 1.75rem 0.45rem 0.5rem;
     }}
     details.rules-details .data-grid tbody td {{
-      padding: 0.45rem 0.5rem;
+      padding: 0.32rem 0.45rem;
       font-size: 0.84rem;
       vertical-align: middle;
     }}
     .rule-detail-box {{
-      margin-top: 0.6rem;
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      margin: 0.45rem 0.5rem 0.55rem;
       padding: 0.55rem 0.65rem;
       border: 1px solid #e4e4e7;
       border-radius: 6px;
       background: #fff;
+      box-sizing: border-box;
+      max-height: min(70vh, 36rem);
+      overflow: auto;
     }}
     .rule-detail-meta {{ font-size: 0.75rem; color: #71717a; margin-bottom: 0.45rem; }}
     .rule-detail-body {{
@@ -578,8 +630,14 @@ ___RULE_RENDERER_JS___
       }};
     }});
 
-    const wrap = document.createElement("div");
-    wrap.className = "wrap";
+    const panel = document.createElement("div");
+    panel.className = "wrap rules-grid-panel";
+    const scrollBox = document.createElement("div");
+    scrollBox.className = "rules-grid-scroll";
+    const grip = document.createElement("div");
+    grip.className = "rules-grid-resizer";
+    grip.title = "Drag up or down to resize the rules list height";
+
     const tbl = document.createElement("table");
     tbl.className = "data-grid";
     tbl.setAttribute("aria-label", "Rules for " + r.profile);
@@ -670,8 +728,47 @@ ___RULE_RENDERER_JS___
 
     const tbod = document.createElement("tbody");
     tbl.appendChild(tbod);
-    wrap.appendChild(tbl);
-    rulesDet.appendChild(wrap);
+    scrollBox.appendChild(tbl);
+    panel.appendChild(scrollBox);
+    panel.appendChild(grip);
+    rulesDet.appendChild(panel);
+
+    (function wireRulesGridResize() {{
+      const minH = 220;
+      const maxH = () => Math.max(minH + 80, Math.floor(window.innerHeight * 0.92));
+      const defH = () =>
+        Math.min(560, Math.max(380, Math.floor(window.innerHeight * 0.5)));
+      function applyH(px) {{
+        const cap = maxH();
+        const v = Math.min(cap, Math.max(minH, Math.round(px)));
+        scrollBox.style.height = v + "px";
+        try {{
+          localStorage.setItem("complianceProfilesRulesGridH", String(v));
+        }} catch (e1) {{}}
+      }}
+      let saved = NaN;
+      try {{
+        saved = parseInt(localStorage.getItem("complianceProfilesRulesGridH") || "", 10);
+      }} catch (e2) {{}}
+      if (!Number.isFinite(saved)) applyH(defH());
+      else applyH(saved);
+
+      grip.addEventListener("mousedown", (e) => {{
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const startY = e.clientY;
+        const startH = scrollBox.getBoundingClientRect().height;
+        function onMove(e2) {{
+          applyH(startH + (e2.clientY - startY));
+        }}
+        function onUp() {{
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        }}
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      }});
+    }})();
 
     const rgCols = tbl.querySelectorAll("colgroup col");
     const rgHeaderCells = tbl.querySelectorAll("thead tr.headers th[data-col]");
@@ -717,12 +814,15 @@ ___RULE_RENDERER_JS___
     function fillRuleDetailCell(tdCell, rid) {{
       const info = RULE_CATALOG[rid];
       tdCell.textContent = "";
+      const wrap = document.createElement("div");
+      wrap.className = "rule-detail-box";
       if (!info) {{
         const hb = document.createElement("div");
         hb.className = "rule-detail-body";
         hb.textContent =
           "No catalog entry for this rule id (missing Rule CR or different namespace snapshot). Id: " + rid;
-        tdCell.appendChild(hb);
+        wrap.appendChild(hb);
+        tdCell.appendChild(wrap);
         return;
       }}
       const hm = document.createElement("div");
@@ -735,8 +835,9 @@ ___RULE_RENDERER_JS___
       }} else {{
         hb.textContent = info.description || "(no description on Rule CR)";
       }}
-      tdCell.appendChild(hm);
-      tdCell.appendChild(hb);
+      wrap.appendChild(hm);
+      wrap.appendChild(hb);
+      tdCell.appendChild(wrap);
     }}
 
     function renderRulesBody() {{
