@@ -372,30 +372,39 @@
    * Whole identifiers that are usually infrastructure / API vocabulary and often appear
    * all-lowercase or with hyphens (not covered by PascalCase / camelCase rules).
    * Includes common daemon / service names (auditd, systemd, chronyd, …) for inline code in
-   * any context. Omit ambiguous English (e.g. named, tuned) from this list.
+   * any context. Omit only ambiguous English: named, tuned.
    * Reject `/` or `-` immediately before the match so `kubelet` is not styled inside
    * `/etc/kubernetes/kubelet.conf` or `--kubelet-https`. Same for trailing `-`.
    */
   const INFRA_ALLOWLIST = [
-    "OAuth",
-    "oauth",
-    "cluster-admin",
-    "namespace-admin",
-    "kube-apiserver",
-    "openshift-apiserver",
-    "openshift-kube-apiserver",
-    "kubelet",
     "apiserver",
     "audispd",
     "auditd",
     "chronyd",
+    "cluster-admin",
+    "containerd",
     "cri-o",
+    "crio",
+    "dnsmasq",
+    "dockerd",
+    "dovecot",
     "firewalld",
+    "httpd",
+    "irqbalance",
     "journald",
+    "kube-apiserver",
+    "kubelet",
     "logind",
+    "namespace-admin",
     "nfs",
     "ntpd",
+    "OAuth",
+    "oauth",
+    "oddjobd",
+    "openshift-apiserver",
+    "openshift-kube-apiserver",
     "postfix",
+    "rpcbind",
     "runc",
     "rsyslogd",
     "sshd",
