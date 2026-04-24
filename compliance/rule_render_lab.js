@@ -415,6 +415,7 @@
     "sshd",
     "sssd",
     "systemd",
+    "usbguard",
     "vsftpd",
   ];
 
