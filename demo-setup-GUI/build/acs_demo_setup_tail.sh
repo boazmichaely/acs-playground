@@ -397,6 +397,70 @@ sys.exit(1)
   fi
 }
 
+status_row_central() {
+  if [[ -z "${ACS_CENTRAL_URL:-}" ]]; then
+    printf '%s\t%s\t%s\n' "central" "absent" "ACS_CENTRAL_URL not set"
+    return 0
+  fi
+
+  local detail
+  detail="$(acs_curl GET "/v1/metadata" 2>/dev/null | python3 -c '
+import json,sys
+try:
+  j=json.load(sys.stdin)
+except Exception:
+  sys.exit(1)
+ver = j.get("version") or ""
+if isinstance(ver, dict):
+  ver = ver.get("version") or ver.get("tag") or ""
+ver = (ver or "").strip()
+if ver:
+  print("Central API reachable — %s" % ver)
+else:
+  print("Central API reachable")
+' 2>/dev/null)" || detail=""
+
+  if [[ -n "${detail}" ]]; then
+    printf '%s\t%s\t%s\n' "central" "ready" "${detail}"
+  else
+    printf '%s\t%s\t%s\n' "central" "absent" "Central API not reachable (check ACS_CENTRAL_URL + credentials)"
+  fi
+}
+
+status_row_secured_cluster() {
+  local scn
+  scn="$(resolve_secured_cluster_name_for_status 2>/dev/null || true)"
+  if [[ -z "${scn}" ]]; then
+    printf '%s\t%s\t%s\n' "secured-cluster" "absent" "SECURED_CLUSTER_NAME not set (and could not be resolved)"
+    return 0
+  fi
+
+  local central_ok
+  central_ok="$(acs_curl GET "/v1/metadata" 2>/dev/null | python3 -c 'import json,sys; json.load(sys.stdin); print(\"ok\")' 2>/dev/null || true)"
+  if [[ -z "${central_ok}" ]]; then
+    printf '%s\t%s\t%s\n' "secured-cluster" "blocked" "needs Central API reachable to verify cluster registration"
+    return 0
+  fi
+
+  local found
+  found="$(acs_curl GET "/v1/clusters" 2>/dev/null | python3 -c '
+import json,sys
+want=sys.argv[1]
+try:
+  j=json.load(sys.stdin)
+except Exception:
+  sys.exit(1)
+names=[(c.get(\"name\") or \"\").strip() for c in j.get(\"clusters\",[]) if (c.get(\"name\") or \"\").strip()]
+print(\"yes\" if want in names else \"no\")
+' "${scn}" 2>/dev/null)" || found="no"
+
+  if [[ "${found}" == "yes" ]]; then
+    printf '%s\t%s\t%s\n' "secured-cluster" "ready" "registered as ${scn}"
+  else
+    printf '%s\t%s\t%s\n' "secured-cluster" "absent" "not registered in Central as ${scn}"
+  fi
+}
+
 status_row_acs_users() {
   local pid
   pid="$(acs_curl GET "/v1/authProviders" 2>/dev/null | python3 -c '
@@ -456,6 +520,8 @@ print("no")
 
 emit_status_json() {
   {
+    status_row_central
+    status_row_secured_cluster
     status_row_ms_demo
     status_row_registries
     status_row_ocp_users

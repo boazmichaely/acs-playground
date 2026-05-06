@@ -11,7 +11,8 @@ function canonicalSlugForStatus(slug) {
   return aliases[slug] || slug;
 }
 
-const DEFERRED_MODULE_SLUGS = new Set(["splunk", "central", "secured-cluster"]);
+// Only Splunk is still deferred; Central + secured cluster now have real --status rows.
+const DEFERRED_MODULE_SLUGS = new Set(["splunk"]);
 
 /** Filled in loadModules: canonical id → { dependsOn: canonical[] } */
 let moduleMetaByCanonical = new Map();
@@ -209,16 +210,6 @@ function securedClusterNameFromPreflight(pf) {
 
 function detailLineForModule(canonicalId, statusMap, preflight) {
   if (DEFERRED_MODULE_SLUGS.has(canonicalId)) {
-    if (canonicalId === "central") {
-      const url = centralUrlFromPreflight(preflight);
-      if (url) return `Current Central URL: ${url}`;
-      return "Deferred — GUI cannot provision Central yet; URL shown when preflight has ACS_CENTRAL_URL.";
-    }
-    if (canonicalId === "secured-cluster") {
-      const cn = securedClusterNameFromPreflight(preflight);
-      if (cn) return `Cluster name (as resolved for ACS): ${cn}`;
-      return "Deferred — GUI install/register not wired; name appears when SECURED_CLUSTER_NAME can be resolved.";
-    }
     if (canonicalId === "splunk") {
       return "Deferred — Splunk skill integration not wired in this UI yet.";
     }
