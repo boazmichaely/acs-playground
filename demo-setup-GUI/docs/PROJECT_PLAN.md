@@ -238,12 +238,6 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 
 Use **§2** vocabulary (**modules 1–8**). Do not edit `acs-demo-setup.sh` until:
 
-- [ ] User has confirmed §2 **numbered modules** + **Stage 1 split** (**CHRIS_OCP_NAMESPACES** under **3**) — or noted exceptions in §8.  
-- [ ] User has confirmed §3 **architecture** (browser → backend → script) — or noted exceptions in §8.  
-- [ ] User has confirmed §2 **full default order** (**1→5**) and **legacy script order vs modular order** (module **4** before **5**) — or noted exceptions in §8.  
-- [ ] User has confirmed **Stages 0–8** are acceptable — or listed deltas in §8.  
-- [ ] User has confirmed **default full install** = today’s monolithic end state — or documented delta in §8.  
-- [ ] Paths are clear: script path in **this doc header** + `README.md`; plans in `demo-setup-GUI/`.  
-- [ ] **§8:** agent appends after **every significant action**, not only on pause — with **`YYYY-MM-DD HH:MM:SS`** (local) in **When**.
+**§8:** agent appends after **every significant action**, not only on pause — with **`YYYY-MM-DD HH:MM:SS`** (local) in **When**.
 
 *If anything is unclear, ask the user once; log outcomes and decisions in §8 when they matter for continuation.*
