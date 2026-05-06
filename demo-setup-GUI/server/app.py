@@ -18,7 +18,24 @@ CONFIG = ROOT / "config" / "modules.json"
 
 DEFAULT_SCRIPT = Path.home() / ".cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh"
 
-ALLOWED_SLUGS = frozenset({"ms-demo", "registries", "ocp-users", "ocp-oauth", "acs-users"})
+# Slugs accepted from modules.json / UI (must match script + manifest).
+KNOWN_MODULE_SLUGS = frozenset(
+    {
+        "ms-demo",
+        "registries",
+        "ocp-users",
+        "ocp-oauth",
+        "acs-users",
+        "splunk",
+        "central",
+        "secured-cluster",
+    }
+)
+# Implemented in acs-demo-setup.sh today (modules 1–5).
+RUNNABLE_SLUGS = frozenset(
+    {"ms-demo", "registries", "ocp-users", "ocp-oauth", "acs-users"}
+)
+DEFERRED_SLUGS = KNOWN_MODULE_SLUGS - RUNNABLE_SLUGS
 
 _lock = threading.Lock()
 _running = False
@@ -109,8 +126,18 @@ def api_run():
     if not isinstance(mods, list):
         return jsonify({"error": "modules must be a list"}), 400
     for m in mods:
-        if m not in ALLOWED_SLUGS:
-            return jsonify({"error": f"disallowed module: {m}"}), 400
+        if m not in KNOWN_MODULE_SLUGS:
+            return jsonify({"error": f"unknown module: {m}"}), 400
+        if m in DEFERRED_SLUGS:
+            return (
+                jsonify(
+                    {
+                        "error": f"module not implemented yet: {m}",
+                        "detail": "Splunk (6), Central (7), and secured-cluster (8) are planned; use CLI/scripts until wired here.",
+                    }
+                ),
+                501,
+            )
 
     if not _lock.acquire(blocking=False):
         return jsonify({"error": "a run is already in progress"}), 409

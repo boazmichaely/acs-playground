@@ -1,6 +1,6 @@
 # PROJECT_PLAN — ACS demo modular setup + localhost GUI
 
-**Status:** draft for review  
+**Status:** v1 GUI + modules **1–5** usable locally; **6–8** deferred (see §8).  
 **Working folder:** `~/code/ACS playground/demo-setup-GUI/`  
 **Script location (unchanged):** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh`  
 **Source of truth for behavior:** `acs-demo-setup.sh` only. This doc: **§2** maps module **#** + ID → script ( **`1`–`8`** ); **§3** diagram + vocabulary; staged plan; no duplicated install procedure.  
@@ -230,6 +230,7 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 | When (local) | What happened | Next (if any) |
 |----------------|---------------|----------------|
 | 2026-05-05 23:18:09 | **Stages 1–4** done: modular **`acs-demo-setup.sh`** (flags **1→5**), **`--status`** + preflight (+ **`ensure_acs_central_url`** when only **`ROX_ENDPOINT`** / **`~/.roxctl/set-env.sh`**); Flask **`server/app.py`**; GUI **`web/`** + **`config/modules.json`**, **`run-gui.sh`**, PatternFly (wide column, module rows, status/collapsibles). §8 **pruned**; log **When** = **`YYYY-MM-DD HH:MM:SS`** (local). | **Stage 5** (structured progress) optional. |
+| 2026-05-05 23:37:07 | **Checkpoint — phase complete:** **`modules.json`** catalogs **1–8** ( **`ocp-oauth`** slug for script; label shows **ocp-OAuth** ); deferred rows **6–8** visible in UI; **`POST /api/run`** returns **501** if **splunk** / **central** / **secured-cluster** selected until implemented. Repo backed up on GitHub (**`boazmichaely/acs-playground`**). | **Next:** **Splunk** (**module 6**) — wire Splunk skill/scripts into run/status; then **Central** (**7**) + **secured cluster** (**8**) per Stage 8 mini-plan. |
 
 ---
 
