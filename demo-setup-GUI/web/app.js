@@ -378,18 +378,9 @@ async function refreshStatus() {
     return;
   }
   const pf = body.preflight;
-  let html = renderPreflight(pf);
+  statusWrap.innerHTML = renderPreflight(pf);
 
   const mods = body.modules || [];
-  let modBody = `<table class="status"><tr><th>ID</th><th>State</th><th>Detail</th></tr>`;
-  for (const m of mods) {
-    const cls = `state-${m.state || ""}`;
-    const det = sanitizeDetailForDisplay(m.detail != null ? String(m.detail) : "");
-    modBody += `<tr><td>${escapeHtml(m.id)}</td><td class="${cls}">${escapeHtml(m.state)}</td><td>${det ? escapeHtml(det) : "—"}</td></tr>`;
-  }
-  modBody += "</table>";
-  html += collapsibleSection(`Modules (${mods.length})`, modBody, true);
-  statusWrap.innerHTML = html;
   applyModuleStatuses(mods, pf);
 }
 
