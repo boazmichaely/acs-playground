@@ -349,6 +349,8 @@ function renderPreflight(pf) {
   const bannerHtml = `<div class="pfBanner ${bannerCls}"><strong>Preflight</strong> — ${ok ? "all checks passed" : "one or more checks failed"}</div>`;
   let html = "";
 
+  html += collapsibleSection("Overview", bannerHtml, true);
+
   const hasChecks = Array.isArray(pf.checks) && pf.checks.length > 0;
   if (hasChecks) {
     let body = `<table class="status compact"><tr><th>Name</th><th>OK</th><th>Detail</th></tr>`;
@@ -359,8 +361,6 @@ function renderPreflight(pf) {
     body += `</table>`;
     html += collapsibleSection(`Checks (${pf.checks.length})`, body, true);
   }
-
-  html += collapsibleSection("Overview", bannerHtml, !hasChecks);
 
   const rs = pf.resolved && typeof pf.resolved === "object" ? pf.resolved : null;
   if (rs && Object.keys(rs).length) {
@@ -400,17 +400,32 @@ function renderPreflight(pf) {
   return html;
 }
 
+function preflightInnerBlocks() {
+  return statusWrap ? [...statusWrap.querySelectorAll("details.pf-block")] : [];
+}
+
+function syncPreflightExpandAllButton() {
+  const btn = document.getElementById("btnPreflightExpandAll");
+  if (!btn) return;
+  const blocks = preflightInnerBlocks();
+  btn.disabled = blocks.length === 0;
+  btn.setAttribute("aria-label", "Expand all sections");
+}
+
 async function refreshStatus() {
   statusWrap.innerHTML = `<p class="pf-v5-c-content pf-m-0" style="color: var(--pf-v5-global--Color--200)">Loading…</p>`;
+  syncPreflightExpandAllButton();
   const r = await fetch("/api/status");
   const body = await r.json();
   if (!r.ok) {
     const errPre = `<pre class="err">${escapeHtml(JSON.stringify(body, null, 2))}</pre>`;
     statusWrap.innerHTML = collapsibleSection("Error response", errPre, true);
+    syncPreflightExpandAllButton();
     return;
   }
   const pf = body.preflight;
   statusWrap.innerHTML = renderPreflight(pf);
+  syncPreflightExpandAllButton();
 
   const mods = body.modules || [];
   applyModuleStatuses(mods, pf);
@@ -456,5 +471,21 @@ document.getElementById("btnRunFull").onclick = async () => {
 };
 
 document.getElementById("btnStatus").onclick = refreshStatus;
+
+document.getElementById("btnPreflightExpandAll").addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const blocks = preflightInnerBlocks();
+  if (!blocks.length) return;
+  const anyClosed = blocks.some((d) => !d.open);
+  const openNext = anyClosed;
+  blocks.forEach((d) => {
+    d.open = openNext;
+  });
+  e.currentTarget.setAttribute(
+    "aria-label",
+    openNext ? "Collapse all sections" : "Expand all sections",
+  );
+});
 
 loadModules().then(() => refreshStatus());

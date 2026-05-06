@@ -472,6 +472,32 @@ details.status-panel[open] .status-panel__chev {
   flex: 1;
 }
 
+/* Icon-only: expand/collapse nested preflight <details> (click does not toggle outer panel). */
+.status-panel__expand-all {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.25rem;
+  border: none;
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+  background: transparent;
+  color: var(--pf-v5-global--Color--200);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.status-panel__expand-all:hover:not(:disabled) {
+  background: var(--pf-v5-global--palette--black-100);
+  color: var(--pf-v5-global--Color--100);
+}
+
+.status-panel__expand-all:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .status-panel__body {
   padding: var(--pf-v5-global--spacer--md);
   background: var(--pf-v5-global--palette--black-50);
