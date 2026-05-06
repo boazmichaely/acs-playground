@@ -190,13 +190,21 @@ function centralUrlFromPreflight(pf) {
   if (!pf || typeof pf !== "object") return "";
   const checks = Array.isArray(pf.checks) ? pf.checks : [];
   const row = checks.find((c) => c && c.name === "ACS_CENTRAL_URL" && c.ok);
-  return row && row.detail ? String(row.detail).trim() : "";
+  if (row && row.detail) return String(row.detail).trim();
+  const env = pf.environment && typeof pf.environment === "object" ? pf.environment : null;
+  const u = env && env.ACS_CENTRAL_URL != null ? String(env.ACS_CENTRAL_URL).trim() : "";
+  return u || "";
 }
 
 function securedClusterNameFromPreflight(pf) {
   if (!pf || typeof pf !== "object") return "";
   const rs = pf.resolved && typeof pf.resolved === "object" ? pf.resolved : null;
-  const n = rs && rs.SECURED_CLUSTER_NAME != null ? String(rs.SECURED_CLUSTER_NAME).trim() : "";
+  let n = rs && rs.SECURED_CLUSTER_NAME != null ? String(rs.SECURED_CLUSTER_NAME).trim() : "";
+  if (n) return n;
+  const env = pf.environment && typeof pf.environment === "object" ? pf.environment : null;
+  if (env && env._resolved_SECURED_CLUSTER_NAME != null) {
+    n = String(env._resolved_SECURED_CLUSTER_NAME).trim();
+  }
   return n || "";
 }
 
@@ -363,6 +371,30 @@ function renderPreflight(pf) {
     }
     body += `</table>`;
     html += collapsibleSection(`Resolved (${n})`, body, false);
+  }
+
+  const os = pf.openshift && typeof pf.openshift === "object" ? pf.openshift : null;
+  if (os && Object.keys(os).length) {
+    const n = Object.keys(os).length;
+    let body = `<table class="status compact"><tr><th>Field</th><th>Value</th></tr>`;
+    for (const [k, v] of Object.entries(os)) {
+      body += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v === null || v === undefined ? "" : String(v))}</td></tr>`;
+    }
+    body += `</table>`;
+    html += collapsibleSection(`OpenShift (from oc) (${n})`, body, false);
+  }
+
+  const env = pf.environment && typeof pf.environment === "object" ? pf.environment : null;
+  if (env && Object.keys(env).length) {
+    const n = Object.keys(env).length;
+    let body = `<table class="status compact"><tr><th>Variable</th><th>Value</th></tr>`;
+    for (const [k, v] of Object.entries(env)) {
+      let disp = v === null || v === undefined ? "" : String(v);
+      if (disp.length > 800) disp = disp.slice(0, 800) + "…";
+      body += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(disp)}</td></tr>`;
+    }
+    body += `</table>`;
+    html += collapsibleSection(`Environment — effective / masked (${n})`, body, false);
   }
 
   return html;

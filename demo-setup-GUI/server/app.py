@@ -117,11 +117,6 @@ def api_status():
         data = json.loads(out.stdout)
     except json.JSONDecodeError:
         return jsonify({"error": "invalid JSON from script", "raw": out.stdout[-8000:]}), 500
-    pf = data.get("preflight")
-    if isinstance(pf, dict):
-        # Strip legacy keys no longer shown in GUI (script still sole source of checks).
-        pf.pop("environment", None)
-        pf.pop("openshift", None)
     return jsonify(data)
 
 
