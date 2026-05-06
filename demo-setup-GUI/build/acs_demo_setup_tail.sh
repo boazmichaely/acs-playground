@@ -329,8 +329,8 @@ status_row_ms_demo() {
 }
 
 status_row_registries() {
-  local id
-  id="$(acs_curl GET "/v1/imageintegrations" 2>/dev/null | python3 -c '
+  local detail
+  detail="$(acs_curl GET "/v1/imageintegrations" 2>/dev/null | python3 -c '
 import json,sys
 ep=sys.argv[1]
 try:
@@ -339,11 +339,16 @@ except Exception:
  sys.exit(1)
 for i in j.get("integrations",[]):
     if i.get("docker",{}).get("endpoint")==ep:
-        print(i.get("id",""))
-        break
-' "${REGISTRY_ENDPOINT}" 2>/dev/null)" || id=""
-  if [[ -n "${id}" ]]; then
-    printf '%s\t%s\t%s\n' "registries" "ready" "endpoint ${REGISTRY_ENDPOINT} id=${id}"
+        name = (i.get("name") or "").strip()
+        if name:
+            print("integration \"%s\" — %s" % (name, ep))
+        else:
+            print("registry integration configured — %s" % ep)
+        sys.exit(0)
+sys.exit(1)
+' "${REGISTRY_ENDPOINT}" 2>/dev/null)" || detail=""
+  if [[ -n "${detail}" ]]; then
+    printf '%s\t%s\t%s\n' "registries" "ready" "${detail}"
   else
     printf '%s\t%s\t%s\n' "registries" "absent" "no integration for ${REGISTRY_ENDPOINT}"
   fi
@@ -368,18 +373,25 @@ status_row_ocp_users() {
 }
 
 status_row_ocp_oauth() {
-  local pid
-  pid="$(acs_curl GET "/v1/authProviders" 2>/dev/null | python3 -c '
+  local detail
+  detail="$(acs_curl GET "/v1/authProviders" 2>/dev/null | python3 -c '
 import json,sys
-try: j=json.load(sys.stdin)
-except: sys.exit(1)
+try:
+ j=json.load(sys.stdin)
+except Exception:
+ sys.exit(1)
 for p in j.get("authProviders",[]):
     if p.get("type")=="openshift":
-        print(p["id"])
-        break
-' 2>/dev/null)" || pid=""
-  if [[ -n "${pid}" ]]; then
-    printf '%s\t%s\t%s\n' "ocp-oauth" "ready" "openshift auth provider id=${pid}"
+        name = (p.get("name") or "").strip()
+        if name:
+            print("OpenShift login: %s" % name)
+        else:
+            print("OpenShift login configured")
+        sys.exit(0)
+sys.exit(1)
+' 2>/dev/null)" || detail=""
+  if [[ -n "${detail}" ]]; then
+    printf '%s\t%s\t%s\n' "ocp-oauth" "ready" "${detail}"
   else
     printf '%s\t%s\t%s\n' "ocp-oauth" "absent" "no openshift-type auth provider"
   fi

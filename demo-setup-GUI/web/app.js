@@ -126,6 +126,18 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+/** Strip opaque API ids (UUIDs) from status detail; prefer script messages that use names. */
+function sanitizeDetailForDisplay(text) {
+  if (text == null || text === "") return "";
+  let s = String(text);
+  s = s.replace(/\bid\s*=\s*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/gi, "");
+  s = s.replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g, "");
+  s = s.replace(/\(\s*\)/g, "");
+  s = s.replace(/\s{2,}/g, " ").trim();
+  s = s.replace(/^[,;\s]+|[,;\s]+$/g, "");
+  return s;
+}
+
 function dependsOnHintHtml(m) {
   const raw = m.dependsOn;
   if (!Array.isArray(raw) || raw.length === 0) return "";
@@ -224,7 +236,7 @@ function badgeOnlyHtml(canonicalId, statusMap) {
     return `<span class="module-status-badge module-status-badge--pending">…</span>`;
   }
   const { state, detail } = st;
-  const title = escapeHtml(detail);
+  const title = escapeHtml(sanitizeDetailForDisplay(detail));
   switch (state) {
     case "ready":
       return `<span class="module-status-badge module-status-badge--ready" title="${title}"><span class="module-status-badge__icon" aria-hidden="true">✓</span> Installed</span>`;
@@ -241,7 +253,8 @@ function badgeOnlyHtml(canonicalId, statusMap) {
 
 function moduleStatusCellInnerHtml(canonicalId, statusMap, preflight) {
   const detailRaw = detailLineForModule(canonicalId, statusMap, preflight);
-  const detailDisp = detailRaw ? escapeHtml(detailRaw) : "—";
+  const cleaned = sanitizeDetailForDisplay(detailRaw);
+  const detailDisp = cleaned ? escapeHtml(cleaned) : "—";
   return `<div class="module-status-split">
     <div class="module-status-split__badge">${badgeOnlyHtml(canonicalId, statusMap)}</div>
     <div class="module-status-split__detail">${detailDisp}</div>
@@ -409,7 +422,8 @@ async function refreshStatus() {
   let modBody = `<table class="status"><tr><th>ID</th><th>State</th><th>Detail</th></tr>`;
   for (const m of mods) {
     const cls = `state-${m.state || ""}`;
-    modBody += `<tr><td>${escapeHtml(m.id)}</td><td class="${cls}">${escapeHtml(m.state)}</td><td>${escapeHtml(m.detail)}</td></tr>`;
+    const det = sanitizeDetailForDisplay(m.detail != null ? String(m.detail) : "");
+    modBody += `<tr><td>${escapeHtml(m.id)}</td><td class="${cls}">${escapeHtml(m.state)}</td><td>${det ? escapeHtml(det) : "—"}</td></tr>`;
   }
   modBody += "</table>";
   html += collapsibleSection(`Modules (${mods.length})`, modBody);
