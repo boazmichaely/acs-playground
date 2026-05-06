@@ -5,6 +5,14 @@ const modSelectionCount = document.getElementById("modSelectionCount");
 const moduleBulkBar = document.getElementById("moduleBulkBar");
 const statusWrap = document.getElementById("statusWrap");
 
+/** Same canonical map as server `canonical_module_slug` — aligns manifest ids with `acs-demo-setup.sh --status`. */
+function canonicalSlugForStatus(slug) {
+  const aliases = { "ocp-OAuth": "ocp-oauth" };
+  return aliases[slug] || slug;
+}
+
+const DEFERRED_MODULE_SLUGS = new Set(["splunk", "central", "secured-cluster"]);
+
 function log(line) {
   logEl.textContent += line;
   logEl.scrollTop = logEl.scrollHeight;
@@ -60,6 +68,59 @@ function moduleCellHtml(m) {
   </span>`;
 }
 
+/**
+ * Build Map(canonicalId -> { state, detail }) from /api/status `modules` array.
+ */
+function statusMapFromModules(modules) {
+  const map = new Map();
+  if (!Array.isArray(modules)) return map;
+  for (const row of modules) {
+    if (!row || typeof row.id !== "string") continue;
+    map.set(row.id, {
+      state: row.state != null ? String(row.state) : "",
+      detail: row.detail != null ? String(row.detail) : "",
+    });
+  }
+  return map;
+}
+
+function moduleStatusBadgeHtml(canonicalId, statusMap) {
+  if (DEFERRED_MODULE_SLUGS.has(canonicalId)) {
+    return `<span class="module-status-badge module-status-badge--deferred" title="Not implemented in GUI runner yet">Deferred</span>`;
+  }
+  const st = statusMap.get(canonicalId);
+  if (!st) {
+    return `<span class="module-status-badge module-status-badge--pending" title="Refresh status after preflight passes">—</span>`;
+  }
+  const { state, detail } = st;
+  const title = escapeHtml(detail);
+  switch (state) {
+    case "ready":
+      return `<span class="module-status-badge module-status-badge--ready" title="${title}"><span class="module-status-badge__icon" aria-hidden="true">✓</span> Installed</span>`;
+    case "partial":
+      return `<span class="module-status-badge module-status-badge--partial" title="${title}"><span class="module-status-badge__icon" aria-hidden="true">◐</span> Partial</span>`;
+    case "blocked":
+      return `<span class="module-status-badge module-status-badge--blocked" title="${title}"><span class="module-status-badge__icon" aria-hidden="true">⚠</span> Blocked</span>`;
+    case "absent":
+      return `<span class="module-status-badge module-status-badge--absent" title="${title}"><span class="module-status-badge__icon" aria-hidden="true">○</span> Not installed</span>`;
+    default:
+      return `<span class="module-status-badge module-status-badge--unknown" title="${title}">${escapeHtml(state || "unknown")}</span>`;
+  }
+}
+
+/** Fill the Status column from latest --status modules list. */
+function applyModuleStatuses(statusModules) {
+  const map = statusMapFromModules(statusModules);
+  const rows = modulesTbody.querySelectorAll("tr[data-module-canonical]");
+  rows.forEach((tr) => {
+    const cid = tr.getAttribute("data-module-canonical");
+    if (!cid) return;
+    const cell = tr.querySelector(".js-module-status-cell");
+    if (!cell) return;
+    cell.innerHTML = moduleStatusBadgeHtml(cid, map);
+  });
+}
+
 modSelectAll.addEventListener("change", () => {
   const on = modSelectAll.checked;
   getModuleCheckboxes().forEach((c) => {
@@ -71,7 +132,7 @@ modSelectAll.addEventListener("change", () => {
 async function loadModules() {
   const r = await fetch("/api/modules");
   if (!r.ok) {
-    modulesTbody.innerHTML = `<tr class="pf-v5-c-table__tr"><td class="pf-v5-c-table__td module-row-td"><span class="err">Failed to load modules: ${r.status}</span></td></tr>`;
+    modulesTbody.innerHTML = `<tr class="pf-v5-c-table__tr"><td class="pf-v5-c-table__td module-row-td" colspan="2"><span class="err">Failed to load modules: ${r.status}</span></td></tr>`;
     syncMasterCheckbox();
     return;
   }
@@ -79,9 +140,11 @@ async function loadModules() {
   const list = data.modules || [];
   modulesTbody.innerHTML = "";
   for (const m of list) {
+    const canonical = canonicalSlugForStatus(String(m.id));
     const safeIdAttr = `mod-${String(m.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const tr = document.createElement("tr");
     tr.className = "pf-v5-c-table__tr";
+    tr.dataset.moduleCanonical = canonical;
     tr.innerHTML = `<td class="pf-v5-c-table__td module-row-td">
         <div class="module-row">
           <div class="pf-v5-c-check module-row__check">
@@ -96,7 +159,8 @@ async function loadModules() {
           </div>
           <label class="module-row__label" for="${safeIdAttr}">${moduleCellHtml(m)}</label>
         </div>
-      </td>`;
+      </td>
+      <td class="pf-v5-c-table__td module-row-td module-status-col js-module-status-cell"><span class="module-status-badge module-status-badge--pending">…</span></td>`;
     modulesTbody.appendChild(tr);
   }
 
@@ -192,6 +256,7 @@ async function refreshStatus() {
   modBody += "</table>";
   html += collapsibleSection(`Modules (${mods.length})`, modBody);
   statusWrap.innerHTML = html;
+  applyModuleStatuses(mods);
 }
 
 async function runModules(mods) {

@@ -40,9 +40,15 @@
                 role="grid"
                 aria-label="Demo modules"
               >
+                <thead class="pf-v5-c-table__thead">
+                  <tr class="pf-v5-c-table__tr">
+                    <th class="pf-v5-c-table__th modules-th-module" scope="col">Module</th>
+                    <th class="pf-v5-c-table__th modules-th-status" scope="col">Status</th>
+                  </tr>
+                </thead>
                 <tbody class="pf-v5-c-table__tbody" id="modulesTbody">
                   <tr class="pf-v5-c-table__tr">
-                    <td class="pf-v5-c-table__td module-row-td">Loading…</td>
+                    <td class="pf-v5-c-table__td module-row-td" colspan="2">Loading…</td>
                   </tr>
                 </tbody>
               </table>
