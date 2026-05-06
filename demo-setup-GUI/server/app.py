@@ -37,6 +37,14 @@ RUNNABLE_SLUGS = frozenset(
 )
 DEFERRED_SLUGS = KNOWN_MODULE_SLUGS - RUNNABLE_SLUGS
 
+
+def canonical_module_slug(slug: str) -> str:
+    """Map manifest/UI aliases to the slugs expected by acs-demo-setup.sh."""
+    # Bash script only accepts lowercase ocp-oauth; allow ocp-OAuth in modules.json id/label style.
+    aliases = {"ocp-OAuth": "ocp-oauth"}
+    return aliases.get(slug, slug)
+
+
 _lock = threading.Lock()
 _running = False
 
@@ -120,11 +128,12 @@ def api_run():
         return jsonify({"error": f"script not found: {sp}"}), 500
 
     body = request.get_json(silent=True) or {}
-    mods = body.get("modules")
-    if mods is None:
-        mods = []
-    if not isinstance(mods, list):
+    mods_raw = body.get("modules")
+    if mods_raw is None:
+        mods_raw = []
+    if not isinstance(mods_raw, list):
         return jsonify({"error": "modules must be a list"}), 400
+    mods = [canonical_module_slug(m) for m in mods_raw]
     for m in mods:
         if m not in KNOWN_MODULE_SLUGS:
             return jsonify({"error": f"unknown module: {m}"}), 400
