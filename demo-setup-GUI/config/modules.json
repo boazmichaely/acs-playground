@@ -1,12 +1,52 @@
 {
   "modules": [
-    { "number": 1, "id": "ms-demo", "label": "ms-demo — namespace + workload" },
-    { "number": 2, "id": "registries", "label": "registries — ACS image integration" },
-    { "number": 3, "id": "ocp-users", "label": "ocp-users — HTPasswd + IdP + RBAC" },
-    { "number": 4, "id": "ocp-OAuth", "label": "ocp-OAuth — Central OpenShift login" },
-    { "number": 5, "id": "acs-users", "label": "acs-users — scope + roles + rules" },
-    { "number": 6, "id": "splunk", "label": "(deferred) splunk — Splunk skill scripts" },
-    { "number": 7, "id": "central", "label": "(deferred) central — Central install/provision" },
-    { "number": 8, "id": "secured-cluster", "label": "(deferred) secured-cluster — secured cluster install/register" }
+    {
+      "number": 7,
+      "id": "central",
+      "label": "(deferred) central — Central install/provision",
+      "dependsOn": []
+    },
+    {
+      "number": 8,
+      "id": "secured-cluster",
+      "label": "(deferred) secured-cluster — secured cluster install/register",
+      "dependsOn": ["central"]
+    },
+    {
+      "number": 1,
+      "id": "ms-demo",
+      "label": "ms-demo — namespace + workload",
+      "dependsOn": []
+    },
+    {
+      "number": 2,
+      "id": "registries",
+      "label": "registries — ACS image integration",
+      "dependsOn": []
+    },
+    {
+      "number": 3,
+      "id": "ocp-users",
+      "label": "ocp-users — HTPasswd + IdP + RBAC",
+      "dependsOn": []
+    },
+    {
+      "number": 4,
+      "id": "ocp-OAuth",
+      "label": "ocp-OAuth — Central OpenShift login",
+      "dependsOn": []
+    },
+    {
+      "number": 5,
+      "id": "acs-users",
+      "label": "acs-users — scope + roles + rules",
+      "dependsOn": ["ocp-OAuth"]
+    },
+    {
+      "number": 6,
+      "id": "splunk",
+      "label": "(deferred) splunk — Splunk skill scripts",
+      "dependsOn": []
+    }
   ]
 }

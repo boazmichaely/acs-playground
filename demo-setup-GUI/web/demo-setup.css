@@ -136,16 +136,20 @@ body {
 .modules-table-scroll .modules-th-status {
   font-size: var(--pf-v5-global--FontSize--sm);
   font-weight: var(--pf-v5-global--FontWeight--bold);
-  width: 9.5rem;
+  min-width: 14rem;
   white-space: nowrap;
   padding: var(--pf-v5-global--spacer--xs) var(--pf-v5-global--spacer--md);
   background: var(--pf-v5-global--palette--black-100);
   border-bottom: 1px solid var(--pf-v5-global--BorderColor--100);
 }
 
+.modules-table-scroll .module-module-col {
+  border-right: 1px solid var(--pf-v5-global--BorderColor--100);
+}
+
 .modules-table-scroll .module-status-col {
-  vertical-align: middle;
-  text-align: right;
+  vertical-align: top;
+  text-align: left;
 }
 
 .module-status-badge {
@@ -202,6 +206,29 @@ body {
   font-weight: var(--pf-v5-global--FontWeight--normal);
 }
 
+.module-status-split {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--pf-v5-global--spacer--sm);
+}
+
+.module-status-split__badge {
+  flex: 0 0 auto;
+  padding-top: 0.125rem;
+}
+
+.module-status-split__detail {
+  flex: 1;
+  min-width: 0;
+  border-left: 1px solid var(--pf-v5-global--BorderColor--100);
+  padding-left: var(--pf-v5-global--spacer--sm);
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--Color--200);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 .module-status-badge--unknown {
   background: var(--pf-v5-global--palette--black-100);
   color: var(--pf-v5-global--Color--100);
@@ -221,9 +248,32 @@ body {
 .module-row {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--pf-v5-global--spacer--sm);
   min-height: 1.85rem;
+}
+
+.module-row__label-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.module-deps-hint {
+  margin-top: 0.2rem;
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--Color--200);
+  font-weight: var(--pf-v5-global--FontWeight--normal);
+}
+
+.module-deps-lock-hint {
+  margin-top: 0.25rem;
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--palette--red-400);
+  font-weight: var(--pf-v5-global--FontWeight--bold);
+}
+
+.module-row--locked .module-row__label {
+  opacity: 0.72;
 }
 
 .module-row__check {
