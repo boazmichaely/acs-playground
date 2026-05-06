@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ACS demo setup</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@5.4.2/patternfly.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@5.4.2/patternfly-addons.css" />
+  <link rel="stylesheet" href="/demo-setup.css" />
+</head>
+<body>
+  <div class="pf-v5-c-page">
+    <main class="pf-v5-c-page__main" tabindex="-1">
+      <header class="pf-v5-c-page__main-section demo-page-header">
+        <h1 class="pf-v5-c-title pf-m-4xl demo-page-title">ACS demo setup</h1>
+      </header>
+
+      <div class="demo-pad">
+        <div class="pf-v5-c-card">
+          <div class="pf-v5-c-card__header">
+            <div class="pf-v5-c-card__header-main">
+              <div class="pf-v5-c-card__title">
+                <h2 class="pf-v5-c-card__title-text pf-m-0">Modules</h2>
+              </div>
+            </div>
+          </div>
+          <div class="pf-v5-c-card__body pf-m-pt-0">
+            <div class="bulk-toolbar" id="moduleBulkBar" aria-label="Module selection">
+              <label class="pf-v5-c-check" for="modSelectAll">
+                <input class="pf-v5-c-check__input" type="checkbox" id="modSelectAll" name="select-all-modules" />
+                <span class="pf-v5-c-check__label">Select all</span>
+              </label>
+              <div class="bulk-toolbar__results">
+                <span id="modSelectionCount" class="bulk-toolbar__count">0 of 0 selected</span>
+              </div>
+            </div>
+            <div class="modules-table-scroll">
+              <table
+                class="pf-v5-c-table modules-table"
+                role="grid"
+                aria-label="Demo modules"
+              >
+                <tbody class="pf-v5-c-table__tbody" id="modulesTbody">
+                  <tr class="pf-v5-c-table__tr">
+                    <td class="pf-v5-c-table__td module-row-td">Loading…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="demo-actions-row">
+              <button class="pf-v5-c-button pf-m-primary" type="button" id="btnRun">Run selected</button>
+              <button class="pf-v5-c-button pf-m-secondary" type="button" id="btnRunFull">
+                Run full default (no flags)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pf-v5-c-card pf-m-mt-lg">
+          <div class="pf-v5-c-card__header">
+            <div class="pf-v5-c-card__header-main">
+              <div class="pf-v5-c-card__title">
+                <h2 class="pf-v5-c-card__title-text pf-m-0">Status</h2>
+              </div>
+            </div>
+            <div class="pf-v5-c-card__actions">
+              <button class="pf-v5-c-button pf-m-secondary" type="button" id="btnStatus">Refresh status</button>
+            </div>
+          </div>
+          <div class="pf-v5-c-card__body pf-m-pt-sm">
+            <details id="statusOuter" class="status-panel" open>
+              <summary class="status-panel__toggle">
+                <span class="status-panel__chev" aria-hidden="true"></span>
+                <span class="status-panel__title">Preflight &amp; module status</span>
+              </summary>
+              <div id="statusWrap" class="status-panel__body"></div>
+            </details>
+          </div>
+        </div>
+
+        <div class="pf-v5-c-card pf-m-mt-lg">
+          <div class="pf-v5-c-card__header">
+            <div class="pf-v5-c-card__header-main">
+              <div class="pf-v5-c-card__title">
+                <h2 class="pf-v5-c-card__title-text pf-m-0">Log</h2>
+              </div>
+            </div>
+          </div>
+          <div class="pf-v5-c-card__body">
+            <div id="log" class="demo-log" role="log" aria-label="Script output"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
