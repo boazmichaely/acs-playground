@@ -188,9 +188,6 @@ function statusMapFromModules(modules) {
 
 function centralUrlFromPreflight(pf) {
   if (!pf || typeof pf !== "object") return "";
-  const env = pf.environment && typeof pf.environment === "object" ? pf.environment : null;
-  const u = env && env.ACS_CENTRAL_URL != null ? String(env.ACS_CENTRAL_URL).trim() : "";
-  if (u) return u;
   const checks = Array.isArray(pf.checks) ? pf.checks : [];
   const row = checks.find((c) => c && c.name === "ACS_CENTRAL_URL" && c.ok);
   return row && row.detail ? String(row.detail).trim() : "";
@@ -199,12 +196,7 @@ function centralUrlFromPreflight(pf) {
 function securedClusterNameFromPreflight(pf) {
   if (!pf || typeof pf !== "object") return "";
   const rs = pf.resolved && typeof pf.resolved === "object" ? pf.resolved : null;
-  let n = rs && rs.SECURED_CLUSTER_NAME != null ? String(rs.SECURED_CLUSTER_NAME).trim() : "";
-  if (n) return n;
-  const env = pf.environment && typeof pf.environment === "object" ? pf.environment : null;
-  if (env && env._resolved_SECURED_CLUSTER_NAME != null) {
-    n = String(env._resolved_SECURED_CLUSTER_NAME).trim();
-  }
+  const n = rs && rs.SECURED_CLUSTER_NAME != null ? String(rs.SECURED_CLUSTER_NAME).trim() : "";
   return n || "";
 }
 
@@ -383,8 +375,6 @@ function renderPreflight(pf) {
     body += `</table>`;
     html += collapsibleSection(`Resolved (${n})`, body, false);
   }
-
-  // Omit preflight "Environment — effective / masked (N)": module rows + Checks cover demo URL/secrets at a glance.
 
   return html;
 }

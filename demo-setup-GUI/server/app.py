@@ -117,6 +117,10 @@ def api_status():
         data = json.loads(out.stdout)
     except json.JSONDecodeError:
         return jsonify({"error": "invalid JSON from script", "raw": out.stdout[-8000:]}), 500
+    pf = data.get("preflight")
+    if isinstance(pf, dict):
+        # Legacy/redundant with Checks + resolved; UI stopped rendering it.
+        pf.pop("environment", None)
     return jsonify(data)
 
 
@@ -142,7 +146,7 @@ def api_run():
                 jsonify(
                     {
                         "error": f"module not implemented yet: {m}",
-                        "detail": "Splunk (6), Central (7), and secured-cluster (8) are planned; use CLI/scripts until wired here.",
+                        "detail": "This module is not wired for GUI runs yet; use acs-demo-setup.sh from a terminal. Refresh status still reports Central and secured-cluster.",
                     }
                 ),
                 501,
