@@ -336,8 +336,8 @@ function selectedSlugs() {
   return getModuleCheckboxes().filter((c) => c.checked && !c.disabled).map((c) => c.value);
 }
 
-/** Wrap content in a collapsible <details>; default open. */
-function collapsibleSection(title, innerHtml, open = true) {
+/** Wrap content in a collapsible <details>. Pass open=true to expand by default. */
+function collapsibleSection(title, innerHtml, open = false) {
   const o = open ? " open" : "";
   return `<details class="pf-block"${o}><summary class="pf-block__summary">${escapeHtml(title)}</summary><div class="pf-block__body">${innerHtml}</div></details>`;
 }
@@ -347,17 +347,20 @@ function renderPreflight(pf) {
   const ok = pf.ok === true;
   const bannerCls = ok ? "ok" : "bad";
   const bannerHtml = `<div class="pfBanner ${bannerCls}"><strong>Preflight</strong> — ${ok ? "all checks passed" : "one or more checks failed"}</div>`;
-  let html = collapsibleSection("Overview", bannerHtml);
+  let html = "";
 
-  if (Array.isArray(pf.checks) && pf.checks.length) {
+  const hasChecks = Array.isArray(pf.checks) && pf.checks.length > 0;
+  if (hasChecks) {
     let body = `<table class="status compact"><tr><th>Name</th><th>OK</th><th>Detail</th></tr>`;
     for (const c of pf.checks) {
       const rowOk = c.ok ? "yes" : "no";
       body += `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(rowOk)}</td><td>${escapeHtml(c.detail)}</td></tr>`;
     }
     body += `</table>`;
-    html += collapsibleSection(`Checks (${pf.checks.length})`, body);
+    html += collapsibleSection(`Checks (${pf.checks.length})`, body, true);
   }
+
+  html += collapsibleSection("Overview", bannerHtml, !hasChecks);
 
   const os = pf.openshift && typeof pf.openshift === "object" ? pf.openshift : null;
   if (os && Object.keys(os).length) {
@@ -367,7 +370,7 @@ function renderPreflight(pf) {
       body += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v === null || v === undefined ? "" : String(v))}</td></tr>`;
     }
     body += `</table>`;
-    html += collapsibleSection(`OpenShift (from oc) (${n})`, body);
+    html += collapsibleSection(`OpenShift (from oc) (${n})`, body, false);
   }
 
   const rs = pf.resolved && typeof pf.resolved === "object" ? pf.resolved : null;
@@ -378,7 +381,7 @@ function renderPreflight(pf) {
       body += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v === null || v === undefined ? "" : String(v))}</td></tr>`;
     }
     body += `</table>`;
-    html += collapsibleSection(`Resolved (${n})`, body);
+    html += collapsibleSection(`Resolved (${n})`, body, false);
   }
 
   // Omit preflight "Environment — effective / masked (N)": module rows + Checks cover demo URL/secrets at a glance.
@@ -406,7 +409,7 @@ async function refreshStatus() {
     modBody += `<tr><td>${escapeHtml(m.id)}</td><td class="${cls}">${escapeHtml(m.state)}</td><td>${det ? escapeHtml(det) : "—"}</td></tr>`;
   }
   modBody += "</table>";
-  html += collapsibleSection(`Modules (${mods.length})`, modBody);
+  html += collapsibleSection(`Modules (${mods.length})`, modBody, true);
   statusWrap.innerHTML = html;
   applyModuleStatuses(mods, pf);
 }
