@@ -435,13 +435,6 @@ status_row_secured_cluster() {
     return 0
   fi
 
-  local central_ok
-  central_ok="$(acs_curl GET "/v1/metadata" 2>/dev/null | python3 -c 'import json,sys; json.load(sys.stdin); print(\"ok\")' 2>/dev/null || true)"
-  if [[ -z "${central_ok}" ]]; then
-    printf '%s\t%s\t%s\n' "secured-cluster" "blocked" "needs Central API reachable to verify cluster registration"
-    return 0
-  fi
-
   local found
   found="$(acs_curl GET "/v1/clusters" 2>/dev/null | python3 -c '
 import json,sys
@@ -449,10 +442,15 @@ want=sys.argv[1]
 try:
   j=json.load(sys.stdin)
 except Exception:
-  sys.exit(1)
+  sys.exit(2)
 names=[(c.get(\"name\") or \"\").strip() for c in j.get(\"clusters\",[]) if (c.get(\"name\") or \"\").strip()]
 print(\"yes\" if want in names else \"no\")
-' "${scn}" 2>/dev/null)" || found="no"
+' "${scn}" 2>/dev/null)" || found="__ERR__"
+
+  if [[ "${found}" == "__ERR__" ]]; then
+    printf '%s\t%s\t%s\n' "secured-cluster" "partial" "cannot verify cluster registration (token may lack permission to list clusters)"
+    return 0
+  fi
 
   if [[ "${found}" == "yes" ]]; then
     printf '%s\t%s\t%s\n' "secured-cluster" "ready" "registered as ${scn}"
