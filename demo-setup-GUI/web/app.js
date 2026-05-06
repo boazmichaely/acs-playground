@@ -354,17 +354,6 @@ function renderPreflight(pf) {
 
   html += collapsibleSection("Overview", bannerHtml, !hasChecks);
 
-  const os = pf.openshift && typeof pf.openshift === "object" ? pf.openshift : null;
-  if (os && Object.keys(os).length) {
-    const n = Object.keys(os).length;
-    let body = `<table class="status compact"><tr><th>Field</th><th>Value</th></tr>`;
-    for (const [k, v] of Object.entries(os)) {
-      body += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v === null || v === undefined ? "" : String(v))}</td></tr>`;
-    }
-    body += `</table>`;
-    html += collapsibleSection(`OpenShift (from oc) (${n})`, body, false);
-  }
-
   const rs = pf.resolved && typeof pf.resolved === "object" ? pf.resolved : null;
   if (rs && Object.keys(rs).length) {
     const n = Object.keys(rs).length;

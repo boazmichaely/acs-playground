@@ -119,8 +119,9 @@ def api_status():
         return jsonify({"error": "invalid JSON from script", "raw": out.stdout[-8000:]}), 500
     pf = data.get("preflight")
     if isinstance(pf, dict):
-        # Legacy/redundant with Checks + resolved; UI stopped rendering it.
+        # Legacy; UI uses Checks + resolved + modules only.
         pf.pop("environment", None)
+        pf.pop("openshift", None)
     return jsonify(data)
 
 
