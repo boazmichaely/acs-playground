@@ -28,25 +28,16 @@ unset ROX_CENTRAL_ADDRESS
 ##### Using infra there are no issues
 ########################################################
 
-# --- Mike Foster's Env ---
-#export TOKEN=<redacted-token>
-#export CENTRAL=<example-central-host>.workshops.example.com
-
-# --- Boaz's Env demo.redhat.com ---
-# vvvvvvvvvvvvvvvvvv
-# Use either the API token or the admin user/password:
-#export ROX_ADMIN_USER="admin"
-#export ROX_ADMIN_PASSWORD="Mjc0MTA1"
-
-#export TOKEN=<redacted-token>
-#export ROX_API_TOKEN=$TOKEN
-
-#export CENTRAL=<example-central-host>.sandbox.example.com
-
-
-#boaz ACSCS
-export CENTRAL=<example>.acs.rhcloud.com
-export TOKEN=<redacted-token>
+# Credentials: export CENTRAL + TOKEN, or copy acs-playground.local.env.example → acs-playground.local.env
+_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_REPO_ROOT/acs-playground.local.env" ]]; then
+	set -a
+	# shellcheck source=/dev/null
+	source "$_REPO_ROOT/acs-playground.local.env"
+	set +a
+fi
+: "${CENTRAL:?Set CENTRAL (ACS hostname, no https) or define it in acs-playground.local.env}"
+: "${TOKEN:?Set TOKEN (API token from RHACS) or define it in acs-playground.local.env}"
 
 
 # Choose roxctl version: use downloaded 4.9.1 or system version

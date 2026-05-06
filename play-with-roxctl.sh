@@ -20,12 +20,16 @@ unset ROX_ADMIN_PASSWORD
 unset ROX_API_TOKEN
 unset ROX_CENTRAL_ADDRESS
 
-
-
-
-#boaz ACSCS
-export CENTRAL=<example>.acs.rhcloud.com
-export TOKEN=<redacted-token>
+# Credentials: export CENTRAL + TOKEN, or copy acs-playground.local.env.example → acs-playground.local.env
+_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_REPO_ROOT/acs-playground.local.env" ]]; then
+	set -a
+	# shellcheck source=/dev/null
+	source "$_REPO_ROOT/acs-playground.local.env"
+	set +a
+fi
+: "${CENTRAL:?Set CENTRAL (ACS hostname, no https) or define it in acs-playground.local.env}"
+: "${TOKEN:?Set TOKEN (API token from RHACS) or define it in acs-playground.local.env}"
 
 ########################################################
 ##### SECTION 2: FUNCTIONS
