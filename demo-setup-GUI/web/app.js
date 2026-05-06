@@ -353,7 +353,7 @@ function renderPreflight(pf) {
 
   const hasChecks = Array.isArray(pf.checks) && pf.checks.length > 0;
   if (hasChecks) {
-    let body = `<table class="status compact"><tr><th>Name</th><th>OK</th><th>Detail</th></tr>`;
+    let body = `<table class="status compact preflight-checks"><tr><th>Name</th><th>OK</th><th>Detail</th></tr>`;
     for (const c of pf.checks) {
       const rowOk = c.ok ? "yes" : "no";
       body += `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(rowOk)}</td><td>${escapeHtml(c.detail)}</td></tr>`;

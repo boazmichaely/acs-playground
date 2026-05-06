@@ -371,7 +371,32 @@ table.status td {
 
 table.compact td {
   vertical-align: top;
+}
+
+/* Long text only in the last column (Detail / Value); avoids breaking "yes"/"no" in Checks. */
+table.compact td:last-child {
+  overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Preflight Checks: fixed OK column + stable Name; Detail absorbs long errors/URLs. */
+table.preflight-checks {
+  table-layout: fixed;
+}
+
+table.preflight-checks th:nth-child(1),
+table.preflight-checks td:nth-child(1) {
+  width: 28%;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+table.preflight-checks th:nth-child(2),
+table.preflight-checks td:nth-child(2) {
+  width: 3.5rem;
+  white-space: nowrap;
+  word-break: normal;
+  text-align: center;
 }
 
 .state-ready {
