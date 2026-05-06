@@ -443,8 +443,8 @@ try:
   j=json.load(sys.stdin)
 except Exception:
   sys.exit(2)
-names=[(c.get(\"name\") or \"\").strip() for c in j.get(\"clusters\",[]) if (c.get(\"name\") or \"\").strip()]
-print(\"yes\" if want in names else \"no\")
+names=[(c.get("name") or "").strip() for c in j.get("clusters",[]) if (c.get("name") or "").strip()]
+print("yes" if want in names else "no")
 ' "${scn}" 2>/dev/null)" || found="__ERR__"
 
   if [[ "${found}" == "__ERR__" ]]; then
