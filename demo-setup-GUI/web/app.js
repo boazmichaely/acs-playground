@@ -381,18 +381,7 @@ function renderPreflight(pf) {
     html += collapsibleSection(`Resolved (${n})`, body);
   }
 
-  const env = pf.environment && typeof pf.environment === "object" ? pf.environment : null;
-  if (env && Object.keys(env).length) {
-    const n = Object.keys(env).length;
-    let body = `<table class="status compact"><tr><th>Variable</th><th>Value</th></tr>`;
-    for (const [k, v] of Object.entries(env)) {
-      let disp = v === null || v === undefined ? "" : String(v);
-      if (disp.length > 800) disp = disp.slice(0, 800) + "…";
-      body += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(disp)}</td></tr>`;
-    }
-    body += `</table>`;
-    html += collapsibleSection(`Environment — effective / masked (${n})`, body);
-  }
+  // Omit preflight "Environment — effective / masked (N)": module rows + Checks cover demo URL/secrets at a glance.
 
   return html;
 }

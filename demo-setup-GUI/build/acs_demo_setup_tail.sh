@@ -421,9 +421,9 @@ else:
 ' 2>/dev/null)" || detail=""
 
   if [[ -n "${detail}" ]]; then
-    printf '%s\t%s\t%s\n' "central" "ready" "${detail}"
+    printf '%s\t%s\t%s\n' "central" "ready" "${detail} — ${ACS_CENTRAL_URL}"
   else
-    printf '%s\t%s\t%s\n' "central" "absent" "Central API not reachable (check ACS_CENTRAL_URL + credentials)"
+    printf '%s\t%s\t%s\n' "central" "absent" "Central API not reachable — ${ACS_CENTRAL_URL} (check credentials)"
   fi
 }
 
