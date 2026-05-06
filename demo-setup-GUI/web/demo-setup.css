@@ -473,6 +473,13 @@ details.status-panel[open] .status-panel__chev {
 }
 
 /* Icon-only: expand/collapse nested preflight <details> (click does not toggle outer panel). */
+/* Material Symbols — expand/collapse-all uses ligature name unfold_more (subset font in index.html). */
+.status-panel__expand-all-ms.material-symbols-outlined {
+  font-size: 22px;
+  line-height: 1;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
 .status-panel__expand-all {
   flex-shrink: 0;
   display: inline-flex;
