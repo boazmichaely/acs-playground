@@ -2,8 +2,8 @@
 
 **Status:** v1 GUI + demo modules **1–5** usable locally; **Splunk (6)** still deferred; **Central bootstrap (`install-central`)** complete; **`install-secured-cluster`** in progress (CRS target — prior init-bundle path may be discarded). See §8.  
 **Working folder:** `~/code/ACS playground/demo-setup-GUI/`  
-**Script — canonical repo copy (backed up on GitHub):** `demo-setup-GUI/scripts/acs-demo-setup.sh` (plus `central-cr-minimal.yaml`, `secured-cluster-cr-minimal.yaml` beside it).  
-**Script — local skill mirror (optional):** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` — keep in sync when iterating outside the repo; **`run-gui.sh`** defaults to the **repo** script when that file exists.  
+**Script — implementation (where real work happens):** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` (YAML defaults beside it: `central-cr-minimal.yaml`, `secured-cluster-cr-minimal.yaml`). Edit here first; test via CLI and/or the localhost GUI (orchestrator).  
+**Script — GitHub backup (sync from skill):** `demo-setup-GUI/scripts/` holds the same files committed to **acs-playground** so work is not laptop-only — **copy skill → repo** when you want a backup pushed; not the primary edit surface unless you deliberately dual-edit.  
 **Source of truth for behavior:** `acs-demo-setup.sh` only. This doc: **§2** maps demo module **#** + ID → script ( **`1`–`8`** ), plus **bootstrap `--module` names** for RHACS install; **§3** diagram + vocabulary; staged plan; no duplicated install procedure.  
 **Principle:** All work in chat aligns with this document; the agent **appends §8** after every **significant** action (see §8). Log **When** column uses local **`YYYY-MM-DD HH:MM:SS`**.
 
@@ -90,7 +90,7 @@ Plain picture if Mermaid does not render:
 - **Secrets:** Do not commit `ACS_ADMIN_PASSWORD`, kubeconfigs, or generated user passwords. Env-based injection only; consider log redaction in a hardening stage.  
 - **Browser:** The UI does not get direct OS access; a **127.0.0.1** server runs the script and streams output.  
 - **Concurrency:** At most **one** install run at a time (queue or HTTP 409) to avoid overlapping `oc` / `roxctl`.  
-- **Skill vs repo:** **`demo-setup-GUI/scripts/acs-demo-setup.sh`** in **acs-playground** is the **canonical backed-up copy** (GitHub). The Cursor skill path is an optional working mirror; **`run-gui.sh`** prefers the repo script when present. This folder holds **plans**, **server + static assets**, and **scripts/** that *call* / ship beside the bootstrap script.
+- **Skill vs repo vs GUI:** **Implementation** = Cursor **skill** `scripts/acs-demo-setup.sh` (RHACS/OpenShift logic). **acs-playground** `demo-setup-GUI/scripts/` = **backup** of that script + YAMLs (commit after meaningful skill changes). **`demo-setup-GUI`** otherwise = **orchestrator only** (Flask + static UI that **spawns** the bash script). **`run-gui.sh` / Flask** default to the **skill** script path so the GUI exercises what you are editing.
 
 ### Design guidelines — GUI module manifest
 
@@ -215,8 +215,8 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 | Path | Purpose |
 |------|--------|
 | `README.md` | Pointers + **how to run the GUI** |
-| `scripts/acs-demo-setup.sh` | **Canonical** bootstrap script (GitHub); YAML defaults beside it |
-| `scripts/*.yaml` | Default **Central** / **SecuredCluster** CR manifests (`CENTRAL_CR_MANIFEST`, `SECURED_CLUSTER_CR_MANIFEST`) |
+| `scripts/acs-demo-setup.sh` | **GitHub backup** of the skill bootstrap script (keep in sync with skill when committing) |
+| `scripts/*.yaml` | Backup CR manifests (skill dir is primary alongside live script) |
 | `docs/PROJECT_PLAN.md` | This plan + Progress log |
 | `run-gui.sh` | Starts Flask UI (`server/app.py`) using `server/.venv` |
 | `server/app.py` | `127.0.0.1` API + static `web/` |
@@ -238,6 +238,7 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 | 2026-05-05 23:18:09 | **Stages 1–4** done: modular **`acs-demo-setup.sh`** (flags **1→5**), **`--status`** + preflight (+ **`ensure_acs_central_url`** when only **`ROX_ENDPOINT`** / **`~/.roxctl/set-env.sh`**); Flask **`server/app.py`**; GUI **`web/`** + **`config/modules.json`**, **`run-gui.sh`**, PatternFly (wide column, module rows, status/collapsibles). §8 **pruned**; log **When** = **`YYYY-MM-DD HH:MM:SS`** (local). | **Stage 5** (structured progress) optional. |
 | 2026-05-05 23:37:07 | **Checkpoint — phase complete:** **`modules.json`** catalogs **1–8** ( **`ocp-oauth`** slug for script; label shows **ocp-OAuth** ); deferred rows **6–8** visible in UI; **`POST /api/run`** returns **501** if **splunk** / **central** / **secured-cluster** selected until implemented. Repo backed up on GitHub (**`boazmichaely/acs-playground`**). | **Next:** **Splunk** (**module 6**) — wire Splunk skill/scripts into run/status; then **Central** (**7**) + **secured cluster** (**8**) per Stage 8 mini-plan. |
 | 2026-05-07 15:49:03 | **`install-central` complete** (CLI **`--module install-central`** — Central CR apply path). **`acs-demo-setup.sh`** + **`central-cr-minimal.yaml`** + **`secured-cluster-cr-minimal.yaml`** copied into **`demo-setup-GUI/scripts/`** and committed — **canonical GitHub backup** per project guidance; **`PROJECT_PLAN`** §2 / Stage 8 / §7 updated. **`install-secured-cluster` mid-way:** validate **operator SecuredCluster CR (CRS)** flow; earlier **init-bundle**-oriented code may need **redo/removal**. GUI still **501** for central/secured-cluster **run** until wired. | **Next:** code + test **`install-secured-cluster`** (CRS), sync skill mirror if desired, then GUI run wiring when ready. |
+| 2026-05-07 16:57:20 | **Roles clarified:** **`demo-setup-GUI`** = orchestrator only (Flask + UI spawning bash). **Skill** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` = **implementation** (iterate here first). **`demo-setup-GUI/scripts/`** = **GitHub backup** (copy skill → repo to push). Docs + **`run-gui.sh`** + Flask **`default_script_path`** updated to **prefer skill** by default. | **Next:** continue **`install-secured-cluster`** coding/tests on skill script; refresh repo **`scripts/`** when backing up. |
 
 ---
 

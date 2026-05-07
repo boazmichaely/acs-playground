@@ -6,10 +6,10 @@ This directory holds **documentation and (later) code** for a localhost web UI a
 
 | What | Where |
 |------|--------|
-| Bootstrap script (**GitHub canonical**) | **`demo-setup-GUI/scripts/acs-demo-setup.sh`** (CR YAML defaults in the same **`scripts/`** folder) |
-| Bootstrap script (Cursor skill mirror, optional) | `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` |
+| Bootstrap script (**implementation — edit here**) | `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` (+ YAML defaults in that folder) |
+| Same script + YAMLs (**GitHub backup** in this repo) | **`demo-setup-GUI/scripts/`** — copy from the skill path before commit when you want **acs-playground** updated |
 | Skill metadata / workflow notes | `~/.cursor/skills/acs-demo-setup/SKILL.md` |
-| This project (plans, server + UI + scripts) | `~/code/ACS playground/demo-setup-GUI/` |
+| **Orchestrator only** (no cluster logic here) | **`demo-setup-GUI/`** — Flask API + static UI that **runs** the bash script |
 
 ## Default behavior (non-negotiable)
 
@@ -50,7 +50,7 @@ The UI uses **PatternFly 5** (jsDelivr) plus project-local **`web/demo-setup.css
 **Run full default** calls the script with **no** `--module` flags (same as CLI default).
 
 Override script path: `export ACS_DEMO_SETUP_SCRIPT=/path/to/acs-demo-setup.sh`  
-Default if unset: **`./scripts/acs-demo-setup.sh`** in this repo when that file exists (else falls back to the skill path via server default).
+Default if unset: **skill** script `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` (so the GUI drives the copy you are iterating on).
 
 Optional: `ACS_GUI_PORT=9000 ./run-gui.sh`
 

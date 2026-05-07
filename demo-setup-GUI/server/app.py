@@ -21,10 +21,10 @@ _SKILL_SCRIPT = Path.home() / ".cursor/skills/acs-demo-setup/scripts/acs-demo-se
 
 
 def default_script_path() -> Path:
-    """Prefer backed-up repo copy; fall back to Cursor skill mirror."""
-    if _REPO_SCRIPT.is_file():
-        return _REPO_SCRIPT
-    return _SKILL_SCRIPT
+    """Implementation lives in the Cursor skill; repo copy is GitHub backup only."""
+    if _SKILL_SCRIPT.is_file():
+        return _SKILL_SCRIPT
+    return _REPO_SCRIPT
 
 # Slugs accepted from modules.json / UI (must match script + manifest).
 KNOWN_MODULE_SLUGS = frozenset(

@@ -2,10 +2,13 @@
 # Local GUI for acs-demo-setup (Stage 4). Requires server/.venv (see README).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-REPO_SCRIPT="${ROOT}/scripts/acs-demo-setup.sh"
+# Implementation lives in the Cursor skill; GUI only orchestrates. Prefer skill path by default.
 SKILL_SCRIPT="${HOME}/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh"
+REPO_SCRIPT="${ROOT}/scripts/acs-demo-setup.sh"
 if [[ -z "${ACS_DEMO_SETUP_SCRIPT:-}" ]]; then
-  if [[ -f "${REPO_SCRIPT}" ]]; then
+  if [[ -f "${SKILL_SCRIPT}" ]]; then
+    export ACS_DEMO_SETUP_SCRIPT="${SKILL_SCRIPT}"
+  elif [[ -f "${REPO_SCRIPT}" ]]; then
     export ACS_DEMO_SETUP_SCRIPT="${REPO_SCRIPT}"
   else
     export ACS_DEMO_SETUP_SCRIPT="${SKILL_SCRIPT}"
