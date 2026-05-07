@@ -16,7 +16,15 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 CONFIG = ROOT / "config" / "modules.json"
 
-DEFAULT_SCRIPT = Path.home() / ".cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh"
+_REPO_SCRIPT = ROOT / "scripts" / "acs-demo-setup.sh"
+_SKILL_SCRIPT = Path.home() / ".cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh"
+
+
+def default_script_path() -> Path:
+    """Prefer backed-up repo copy; fall back to Cursor skill mirror."""
+    if _REPO_SCRIPT.is_file():
+        return _REPO_SCRIPT
+    return _SKILL_SCRIPT
 
 # Slugs accepted from modules.json / UI (must match script + manifest).
 KNOWN_MODULE_SLUGS = frozenset(
@@ -68,7 +76,7 @@ def subprocess_env() -> dict[str, str]:
 
 
 def script_path() -> Path:
-    p = os.environ.get("ACS_DEMO_SETUP_SCRIPT", str(DEFAULT_SCRIPT))
+    p = os.environ.get("ACS_DEMO_SETUP_SCRIPT", str(default_script_path()))
     return Path(p).expanduser()
 
 

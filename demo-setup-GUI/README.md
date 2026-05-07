@@ -6,9 +6,10 @@ This directory holds **documentation and (later) code** for a localhost web UI a
 
 | What | Where |
 |------|--------|
-| Bootstrap script (source of truth) | `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` |
+| Bootstrap script (**GitHub canonical**) | **`demo-setup-GUI/scripts/acs-demo-setup.sh`** (CR YAML defaults in the same **`scripts/`** folder) |
+| Bootstrap script (Cursor skill mirror, optional) | `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` |
 | Skill metadata / workflow notes | `~/.cursor/skills/acs-demo-setup/SKILL.md` |
-| This project (plans, future server + static UI) | `~/code/ACS playground/demo-setup-GUI/` |
+| This project (plans, server + UI + scripts) | `~/code/ACS playground/demo-setup-GUI/` |
 
 ## Default behavior (non-negotiable)
 
@@ -48,7 +49,8 @@ The UI uses **PatternFly 5** (jsDelivr) plus project-local **`web/demo-setup.css
 
 **Run full default** calls the script with **no** `--module` flags (same as CLI default).
 
-Override script path: `export ACS_DEMO_SETUP_SCRIPT=/path/to/acs-demo-setup.sh`
+Override script path: `export ACS_DEMO_SETUP_SCRIPT=/path/to/acs-demo-setup.sh`  
+Default if unset: **`./scripts/acs-demo-setup.sh`** in this repo when that file exists (else falls back to the skill path via server default).
 
 Optional: `ACS_GUI_PORT=9000 ./run-gui.sh`
 

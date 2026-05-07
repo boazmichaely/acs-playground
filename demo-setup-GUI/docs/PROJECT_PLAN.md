@@ -1,16 +1,17 @@
 # PROJECT_PLAN — ACS demo modular setup + localhost GUI
 
-**Status:** v1 GUI + modules **1–5** usable locally; **6–8** deferred (see §8).  
+**Status:** v1 GUI + demo modules **1–5** usable locally; **Splunk (6)** still deferred; **Central bootstrap (`install-central`)** complete; **`install-secured-cluster`** in progress (CRS target — prior init-bundle path may be discarded). See §8.  
 **Working folder:** `~/code/ACS playground/demo-setup-GUI/`  
-**Script location (unchanged):** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh`  
-**Source of truth for behavior:** `acs-demo-setup.sh` only. This doc: **§2** maps module **#** + ID → script ( **`1`–`8`** ); **§3** diagram + vocabulary; staged plan; no duplicated install procedure.  
+**Script — canonical repo copy (backed up on GitHub):** `demo-setup-GUI/scripts/acs-demo-setup.sh` (plus `central-cr-minimal.yaml`, `secured-cluster-cr-minimal.yaml` beside it).  
+**Script — local skill mirror (optional):** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` — keep in sync when iterating outside the repo; **`run-gui.sh`** defaults to the **repo** script when that file exists.  
+**Source of truth for behavior:** `acs-demo-setup.sh` only. This doc: **§2** maps demo module **#** + ID → script ( **`1`–`8`** ), plus **bootstrap `--module` names** for RHACS install; **§3** diagram + vocabulary; staged plan; no duplicated install procedure.  
 **Principle:** All work in chat aligns with this document; the agent **appends §8** after every **significant** action (see §8). Log **When** column uses local **`YYYY-MM-DD HH:MM:SS`**.
 
 ---
 
 ## 1. Objectives
 
-1. **Modular installation** — choose which parts to run or refresh. **Module numbers and IDs** are fixed in **§2** (`1` … `8`). **1–5** are **v1** (implemented in `acs-demo-setup.sh` after Stage 1). **6–8** are **deferred**. Behavior for **1–5** lives **only** in the script; **§2** maps numbers + IDs to script headings (no duplicated procedure).
+1. **Modular installation** — choose which parts to run or refresh. **Demo module numbers and IDs** are fixed in **§2** (`1` … `8`). **1–5** are **v1** (implemented in `acs-demo-setup.sh`). **6** (Splunk) is **deferred**. **7–8** map to RHACS **bootstrap CLI modules** **`install-central`** (complete) and **`install-secured-cluster`** (in progress — operator **SecuredCluster CR / CRS**, not legacy init-bundle). Behavior lives **only** in the script; **§2** maps numbers + IDs + bootstrap flags (no duplicated procedure).
 
 2. **Default behavior** — No module flags ⇒ **same end state** as today’s monolithic script. **Full-install sequence** is **§2** (below); orchestration may **resequence** relative to legacy **line order** (today’s script runs ACS scope/roles **before** heading **`6)`** OpenShift auth provider; modular order runs module **4** before module **5**’s work — see §2).
 
@@ -38,14 +39,16 @@ Headings below match the script’s numbered section comments (e.g. `# ---------
 | **4** | **OCP-OAuth** | `6) OpenShift OAuth auth provider on Central` |
 | **5** | **ACS users** | `4–5) ACS access scope + role` and `7) Group rules` |
 | **6** | **Splunk** | *(deferred)* — Splunk demo skill / scripts; **Stage 6**. Not in `acs-demo-setup.sh` today. |
-| **7** | **Central** | *(deferred)* — install/provision ACS Central; separate mini-plan (**Stage 8**). |
-| **8** | **Secured cluster** | *(deferred)* — install/register secured cluster; same mini-plan bucket as **7** (**Stage 8**). |
+| **7** | **Central** | **CLI:** `--module install-central` — **complete**. Applies **Central** custom resource via **`CENTRAL_CR_MANIFEST`** (default **`scripts/central-cr-minimal.yaml`** next to the script). RHACS operator must already be installed. Idempotent noop if a Central CR already exists in `stackrox`. |
+| **8** | **Secured cluster** | **CLI:** `--module install-secured-cluster` — **in progress / needs validation**. Target design: **SecuredCluster CR** reconciled by the operator (**CRS path**; **`SECURED_CLUSTER_CR_MANIFEST`**, default **`scripts/secured-cluster-cr-minimal.yaml`**). Earlier experimental work may have used **init bundle** wiring; that approach may be **redone** to align with CRS-only flow. |
+
+**Bootstrap sequence (greenfield, when both selected):** **`install-central` → `install-secured-cluster` →** demo modules **1 → 2 → 3 → 4 → 5** (canonical order in script).
 
 **Dependency:** **5** runs only after **4** (orchestrator / `--status`).
 
-**Full default install order (v1):** preflight → **1 → 2 → 3 → 4 → 5**. In-file, §4–5 appear before §6; modular runs run **4** before **5**’s bundle — same operations, different sequence.
+**Full default install order (v1, Central already exists):** preflight → **1 → 2 → 3 → 4 → 5**. In-file, §4–5 appear before §6; modular runs run **4** before **5**’s bundle — same operations, different sequence.
 
-**Deferred:** **6** via Stage 6; **7 + 8** via Stage 8 (may split later).
+**Deferred:** **6** via Stage 6. **7** complete (CLI); **8** active development (CLI).
 
 ---
 
@@ -87,7 +90,7 @@ Plain picture if Mermaid does not render:
 - **Secrets:** Do not commit `ACS_ADMIN_PASSWORD`, kubeconfigs, or generated user passwords. Env-based injection only; consider log redaction in a hardening stage.  
 - **Browser:** The UI does not get direct OS access; a **127.0.0.1** server runs the script and streams output.  
 - **Concurrency:** At most **one** install run at a time (queue or HTTP 409) to avoid overlapping `oc` / `roxctl`.  
-- **Skill vs repo:** Implementation of *what* gets installed stays in the **skill script**; this folder holds **plans**, and eventually **server + static assets** that *call* the script.
+- **Skill vs repo:** **`demo-setup-GUI/scripts/acs-demo-setup.sh`** in **acs-playground** is the **canonical backed-up copy** (GitHub). The Cursor skill path is an optional working mirror; **`run-gui.sh`** prefers the repo script when present. This folder holds **plans**, **server + static assets**, and **scripts/** that *call* / ship beside the bootstrap script.
 
 ### Design guidelines — GUI module manifest
 
@@ -193,9 +196,10 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 ### Stage 8 — Modules **7–8** (Central, Secured cluster)
 
 **Deliverable:**  
-- Separate mini-plan for **Central** (**7**) and **Secured cluster** (**8**) — status → run → UI — so cluster install work does not destabilize **1–5**.
+- **`install-central` — done:** CR apply path documented in **§2**; manifests in **`scripts/`**.  
+- **`install-secured-cluster` — in flight:** finish **CRS**-based SecuredCluster flow in script + manifests; reconcile any prior **init-bundle**-based experiment (may be removed). Later: GUI **run** wiring; **`--status`** already surfaces registration row.
 
-**Proof:** §8 gains an entry when the mini-plan starts.
+**Proof:** §8 entries record bootstrap milestones (central complete → secured-cluster CRS validated).
 
 ---
 
@@ -211,6 +215,8 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 | Path | Purpose |
 |------|--------|
 | `README.md` | Pointers + **how to run the GUI** |
+| `scripts/acs-demo-setup.sh` | **Canonical** bootstrap script (GitHub); YAML defaults beside it |
+| `scripts/*.yaml` | Default **Central** / **SecuredCluster** CR manifests (`CENTRAL_CR_MANIFEST`, `SECURED_CLUSTER_CR_MANIFEST`) |
 | `docs/PROJECT_PLAN.md` | This plan + Progress log |
 | `run-gui.sh` | Starts Flask UI (`server/app.py`) using `server/.venv` |
 | `server/app.py` | `127.0.0.1` API + static `web/` |
@@ -231,6 +237,7 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 |----------------|---------------|----------------|
 | 2026-05-05 23:18:09 | **Stages 1–4** done: modular **`acs-demo-setup.sh`** (flags **1→5**), **`--status`** + preflight (+ **`ensure_acs_central_url`** when only **`ROX_ENDPOINT`** / **`~/.roxctl/set-env.sh`**); Flask **`server/app.py`**; GUI **`web/`** + **`config/modules.json`**, **`run-gui.sh`**, PatternFly (wide column, module rows, status/collapsibles). §8 **pruned**; log **When** = **`YYYY-MM-DD HH:MM:SS`** (local). | **Stage 5** (structured progress) optional. |
 | 2026-05-05 23:37:07 | **Checkpoint — phase complete:** **`modules.json`** catalogs **1–8** ( **`ocp-oauth`** slug for script; label shows **ocp-OAuth** ); deferred rows **6–8** visible in UI; **`POST /api/run`** returns **501** if **splunk** / **central** / **secured-cluster** selected until implemented. Repo backed up on GitHub (**`boazmichaely/acs-playground`**). | **Next:** **Splunk** (**module 6**) — wire Splunk skill/scripts into run/status; then **Central** (**7**) + **secured cluster** (**8**) per Stage 8 mini-plan. |
+| 2026-05-07 15:49:03 | **`install-central` complete** (CLI **`--module install-central`** — Central CR apply path). **`acs-demo-setup.sh`** + **`central-cr-minimal.yaml`** + **`secured-cluster-cr-minimal.yaml`** copied into **`demo-setup-GUI/scripts/`** and committed — **canonical GitHub backup** per project guidance; **`PROJECT_PLAN`** §2 / Stage 8 / §7 updated. **`install-secured-cluster` mid-way:** validate **operator SecuredCluster CR (CRS)** flow; earlier **init-bundle**-oriented code may need **redo/removal**. GUI still **501** for central/secured-cluster **run** until wired. | **Next:** code + test **`install-secured-cluster`** (CRS), sync skill mirror if desired, then GUI run wiring when ready. |
 
 ---
 
@@ -238,6 +245,12 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 
 Use **§2** vocabulary (**modules 1–8**). Do not edit `acs-demo-setup.sh` until:
 
-**§8:** agent appends after **every significant action**, not only on pause — with **`YYYY-MM-DD HH:MM:SS`** (local) in **When**.
+- [ ] User has confirmed §2 **numbered modules** + **Stage 1 split** (**CHRIS_OCP_NAMESPACES** under **3**) — or noted exceptions in §8.  
+- [ ] User has confirmed §3 **architecture** (browser → backend → script) — or noted exceptions in §8.  
+- [ ] User has confirmed §2 **full default order** (**1→5**) and **legacy script order vs modular order** (module **4** before **5**) — or noted exceptions in §8.  
+- [ ] User has confirmed **Stages 0–8** are acceptable — or listed deltas in §8.  
+- [ ] User has confirmed **default full install** = today’s monolithic end state — or documented delta in §8.  
+- [ ] Paths are clear: script path in **this doc header** + `README.md`; plans in `demo-setup-GUI/`.  
+- [ ] **§8:** agent appends after **every significant action**, not only on pause — with **`YYYY-MM-DD HH:MM:SS`** (local) in **When**.
 
 *If anything is unclear, ask the user once; log outcomes and decisions in §8 when they matter for continuation.*
