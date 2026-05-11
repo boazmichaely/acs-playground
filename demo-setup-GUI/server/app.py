@@ -4,8 +4,10 @@ Bind 127.0.0.1 only. All cluster/auth checks live in the bootstrap script — th
 """
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import signal
 import subprocess
 import threading
 from pathlib import Path
@@ -33,12 +35,22 @@ KNOWN_MODULE_SLUGS = frozenset(
         "acs-users",
         "splunk",
         "central",
+        "roxctl-env",
         "secured-cluster",
     }
 )
-# Implemented in acs-demo-setup.sh today (modules 1–5).
+# Wired to acs-demo-setup.sh --module (Splunk still CLI-only via skill scripts).
 RUNNABLE_SLUGS = frozenset(
-    {"ms-demo", "registries", "ocp-users", "ocp-oauth", "acs-users"}
+    {
+        "central",
+        "roxctl-env",
+        "secured-cluster",
+        "ms-demo",
+        "registries",
+        "ocp-users",
+        "ocp-oauth",
+        "acs-users",
+    }
 )
 DEFERRED_SLUGS = KNOWN_MODULE_SLUGS - RUNNABLE_SLUGS
 
@@ -50,25 +62,76 @@ def canonical_module_slug(slug: str) -> str:
     return aliases.get(slug, slug)
 
 
+def script_module_argument(canonical_slug: str) -> str:
+    """Map GUI/status module id → argv token for `acs-demo-setup.sh --module` (bootstrap names differ)."""
+    s = canonical_module_slug(canonical_slug)
+    bootstrap = {
+        "central": "install-central",
+        "secured-cluster": "install-secured-cluster",
+    }
+    return bootstrap.get(s, s)
+
+
 _lock = threading.Lock()
 _running = False
+# Long-running bash from POST /api/run (kill on shutdown so Ctrl-C does not leave children behind).
+_active_run_proc: subprocess.Popen | None = None
+_active_run_proc_lock = threading.Lock()
+
+
+def _terminate_active_run() -> None:
+    """SIGTERM/SIGINT cleanup: stop streaming bash and its process group."""
+    global _active_run_proc
+    with _active_run_proc_lock:
+        proc = _active_run_proc
+        _active_run_proc = None
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, AttributeError):
+        proc.terminate()
+    try:
+        proc.wait(timeout=8)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
+        proc.wait(timeout=3)
+
+
+def _shutdown_signal(signum: int, frame: object | None) -> None:
+    _terminate_active_run()
+    signal.signal(signum, signal.SIG_DFL)
+    signal.raise_signal(signum)
+
+
+for _sig in (signal.SIGINT, signal.SIGTERM):
+    try:
+        signal.signal(_sig, _shutdown_signal)
+    except ValueError:
+        pass  # not main thread / restricted embed
+atexit.register(_terminate_active_run)
 
 app = Flask(__name__, static_folder=str(WEB), static_url_path="")
 
 
-def subprocess_env() -> dict[str, str]:
+def subprocess_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """Env for bash/oc subprocesses — GUI servers often have a minimal PATH."""
     env = dict(os.environ)
     kube = Path.home() / ".kube" / "config"
     if kube.is_file():
         env.setdefault("KUBECONFIG", str(kube))
-    extra = env.get("ACS_GUI_EXTRA_PATH", "").strip()
-    if extra:
-        env["PATH"] = extra + os.pathsep + env.get("PATH", "")
+    path_extra = env.get("ACS_GUI_EXTRA_PATH", "").strip()
+    if path_extra:
+        env["PATH"] = path_extra + os.pathsep + env.get("PATH", "")
     else:
         brew = "/opt/homebrew/bin:/usr/local/bin"
         if brew not in env.get("PATH", ""):
             env["PATH"] = brew + os.pathsep + env.get("PATH", "")
+    if extra:
+        env.update(extra)
     return env
 
 
@@ -151,6 +214,8 @@ def api_run():
     if not isinstance(mods_raw, list):
         return jsonify({"error": "modules must be a list"}), 400
     mods = [canonical_module_slug(m) for m in mods_raw]
+    update_roxctl_env = body.get("updateRoxctlEnv") is True
+
     for m in mods:
         if m not in KNOWN_MODULE_SLUGS:
             return jsonify({"error": f"unknown module: {m}"}), 400
@@ -159,7 +224,7 @@ def api_run():
                 jsonify(
                     {
                         "error": f"module not implemented yet: {m}",
-                        "detail": "This module is not wired for GUI runs yet; use acs-demo-setup.sh from a terminal. Refresh status still reports Central and secured-cluster.",
+                        "detail": "This module is not wired for GUI runs yet; use acs-demo-setup.sh or the Splunk skill from a terminal.",
                     }
                 ),
                 501,
@@ -170,11 +235,14 @@ def api_run():
     _running = True
 
     def generate():
-        global _running
+        global _running, _active_run_proc
+        proc: subprocess.Popen | None = None
         try:
             cmd = [str(sp)]
+            if update_roxctl_env:
+                cmd.append("--update-roxctl-env")
             for m in mods:
-                cmd.extend(["--module", m])
+                cmd.extend(["--module", script_module_argument(m)])
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -182,13 +250,37 @@ def api_run():
                 text=True,
                 bufsize=1,
                 env=subprocess_env(),
+                start_new_session=True,
             )
+            with _active_run_proc_lock:
+                _active_run_proc = proc
             assert proc.stdout is not None
-            for line in proc.stdout:
-                yield line
-            proc.wait()
-            yield f"\n___EXIT_CODE_{proc.returncode}___\n"
+            try:
+                for line in proc.stdout:
+                    yield line
+            finally:
+                if proc.stdout:
+                    proc.stdout.close()
+            rc = proc.wait()
+            yield f"\n___EXIT_CODE_{rc}___\n"
+        except GeneratorExit:
+            if proc is not None and proc.poll() is None:
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    proc.terminate()
+                try:
+                    proc.wait(timeout=8)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        proc.kill()
+            raise
         finally:
+            with _active_run_proc_lock:
+                if _active_run_proc is proc:
+                    _active_run_proc = None
             _running = False
             _lock.release()
 

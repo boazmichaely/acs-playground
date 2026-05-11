@@ -14,6 +14,17 @@ function canonicalSlugForStatus(slug) {
 // Only Splunk is still deferred; Central + secured cluster now have real --status rows.
 const DEFERRED_MODULE_SLUGS = new Set(["splunk"]);
 
+/** Canonical `/api/run` slugs in `acs-demo-setup.sh` order (Central → SC → demo). Splunk excluded (not wired). */
+const FULL_INSTALL_SLUGS_ORDERED = [
+  "central",
+  "secured-cluster",
+  "ms-demo",
+  "registries",
+  "ocp-users",
+  "ocp-oauth",
+  "acs-users",
+];
+
 /** Filled in loadModules: canonical id → { dependsOn: canonical[] } */
 let moduleMetaByCanonical = new Map();
 
@@ -21,6 +32,15 @@ let lastStatusMap = new Map();
 /** Full `modules` array from last `/api/status` (includes securedCluster breakdown). */
 let lastStatusModules = [];
 let lastPreflight = null;
+
+let statusRefreshIntervalId = null;
+
+function clearStatusRefreshInterval() {
+  if (statusRefreshIntervalId !== null) {
+    clearInterval(statusRefreshIntervalId);
+    statusRefreshIntervalId = null;
+  }
+}
 
 function log(line) {
   logEl.textContent += line;
@@ -99,23 +119,41 @@ function syncDependencyLocks() {
 }
 
 function syncMasterCheckbox() {
-  const boxes = getModuleCheckboxes().filter((b) => !b.disabled);
+  const cbByCanon = collectCheckboxByCanonical();
+  const installCbs = FULL_INSTALL_SLUGS_ORDERED.map((slug) =>
+    cbByCanon.get(canonicalSlugForStatus(slug)),
+  ).filter(Boolean);
   const allBoxes = getModuleCheckboxes();
   const n = allBoxes.length;
   const checked = allBoxes.filter((b) => b.checked).length;
-  const enabledCount = boxes.length;
-  const checkedEnabled = boxes.filter((b) => b.checked).length;
-  modSelectAll.checked = enabledCount > 0 && checkedEnabled === enabledCount;
-  modSelectAll.indeterminate = checkedEnabled > 0 && checkedEnabled < enabledCount;
+
+  const allInstallChecked =
+    installCbs.length === FULL_INSTALL_SLUGS_ORDERED.length &&
+    installCbs.every((cb) => cb.checked);
+
+  modSelectAll.checked = allInstallChecked;
+  modSelectAll.indeterminate = !allInstallChecked && installCbs.some((cb) => cb.checked);
   modSelectionCount.textContent = `${checked} of ${n} selected`;
   moduleBulkBar.classList.toggle("bulk-toolbar--has-selection", checked > 0);
 }
 
+/** Select / clear the runnable full-install set (Central through acs-users). Splunk is never toggled here. */
 function applySelectAll(on) {
-  for (let pass = 0; pass < 4; pass++) {
+  if (!on) {
     getModuleCheckboxes().forEach((c) => {
-      if (!c.disabled) c.checked = on;
+      c.checked = false;
     });
+    syncDependencyLocks();
+    syncMasterCheckbox();
+    return;
+  }
+  for (let pass = 0; pass < 8; pass++) {
+    const cbByCanon = collectCheckboxByCanonical();
+    for (const slug of FULL_INSTALL_SLUGS_ORDERED) {
+      const canonical = canonicalSlugForStatus(slug);
+      const cb = cbByCanon.get(canonical);
+      if (cb && !cb.disabled) cb.checked = true;
+    }
     syncDependencyLocks();
   }
   syncMasterCheckbox();
@@ -222,14 +260,59 @@ function detailLineForModule(canonicalId, statusMap, preflight) {
 
 const SC_LEVEL_ORDER = ["crs_secret", "securedcluster_cr", "workloads", "central_registration"];
 const SC_LEVEL_LABEL = {
-  crs_secret: "CRS",
-  securedcluster_cr: "CR",
-  workloads: "Pods",
-  central_registration: "Central",
+  crs_secret: "Registration secret",
+  securedcluster_cr: "SecuredCluster CR",
+  workloads: "Secured cluster workloads",
+  central_registration: "Visibility in Central",
 };
+
+/** Collapsible Central API token row for `roxctlEnvConsistency.adminApiToken`. */
+function roxctlAdminApiTokenBlockHtml(admin) {
+  if (!admin || typeof admin !== "object") return "";
+  const st = admin.state != null ? String(admin.state) : "unknown";
+  const nm = admin.tokenName != null ? String(admin.tokenName).trim() : "roxctl-admin";
+  const envHas = admin.envHasToken === true;
+  const det = admin.detail ? sanitizeDetailForDisplay(String(admin.detail)) : "";
+  const envCell = envHas ? "yes" : "no";
+  let sum = `API token · ${nm}`;
+  if (st === "present") sum += " · on Central";
+  else if (st === "absent") sum += " · missing on Central";
+  else if (st === "skipped") sum += " · n/a";
+  else sum += ` · ${st}`;
+  return `<details class="sc-levels re-env-levels"><summary class="sc-levels__sum">${escapeHtml(sum)}</summary><div class="sc-levels__body"><table class="pf-v5-c-table pf-m-compact"><tbody><tr><th scope="row">Named token on Central</th><td><code>${escapeHtml(nm)}</code> (${escapeHtml(st)})</td></tr><tr><th scope="row">ROX_API_TOKEN in env</th><td>${escapeHtml(envCell)}</td></tr>${det ? `<tr><th scope="row">Detail</th><td>${escapeHtml(det)}</td></tr>` : ""}</tbody></table></div></details>`;
+}
+
+/** Collapsible Route vs env table for `modules[].roxctlEnvConsistency` (`roxctl-env` status row). */
+function roxctlEnvConsistencyBlockHtml(cc) {
+  if (!cc || typeof cc !== "object") return "";
+  const admin = cc.adminApiToken && typeof cc.adminApiToken === "object" ? cc.adminApiToken : null;
+  const adminLayers = admin ? roxctlAdminApiTokenBlockHtml(admin) : "";
+  const cs = cc.state != null ? String(cc.state) : "";
+  const rhRaw = cc.routeHost != null ? String(cc.routeHost).trim() : "";
+  const envHosts = Array.isArray(cc.envHosts) ? cc.envHosts : [];
+  const clusterCell = rhRaw !== "" ? `<code>${escapeHtml(rhRaw)}</code>` : "—";
+  const envRows = envHosts
+    .map(
+      (e) =>
+        `<tr><th scope="row">${escapeHtml(String(e.source || ""))}</th><td><code>${escapeHtml(String(e.host || ""))}</code></td></tr>`,
+    )
+    .join("");
+  const unsetRow =
+    envHosts.length === 0 && rhRaw !== ""
+      ? `<tr><th scope="row">ACS_CENTRAL_URL / ROX_ENDPOINT</th><td>— <span style="color:var(--pf-v5-global--Color--200)">(unset in process env)</span></td></tr>`
+      : "";
+  let sum = "compare · Route vs env";
+  if (cs === "ok") sum = "consistent · Route vs env";
+  else if (cs === "skipped") sum = "n/a · Route vs env";
+
+  return `<details class="sc-levels re-env-levels"><summary class="sc-levels__sum">${escapeHtml(sum)}</summary><div class="sc-levels__body"><table class="pf-v5-c-table pf-m-compact"><tbody><tr><th scope="row">Cluster (OpenShift Route)</th><td>${clusterCell}</td></tr>${envRows}${unsetRow}</tbody></table>${adminLayers}</div></details>`;
+}
 
 /** Compact collapsible for `modules[].securedCluster` (script `--status`). */
 function securedClusterLevelsBlockHtml(sc) {
+  const ov0 = sc && sc.overall && typeof sc.overall === "object" ? sc.overall : null;
+  if (ov0 && ov0.state === "absent") return "";
+
   const levels = sc && sc.levels && typeof sc.levels === "object" ? sc.levels : null;
   if (!levels) return "";
 
@@ -284,7 +367,18 @@ function badgeOnlyHtml(canonicalId, statusMap) {
 function moduleStatusCellInnerHtml(canonicalId, statusMap, preflight) {
   const badge = badgeOnlyHtml(canonicalId, statusMap);
   let detailInner = "";
-  if (canonicalId === "secured-cluster") {
+  if (canonicalId === "roxctl-env") {
+    const row = lastStatusModules.find((x) => x && x.id === "roxctl-env");
+    const cc =
+      row && row.roxctlEnvConsistency && typeof row.roxctlEnvConsistency === "object"
+        ? row.roxctlEnvConsistency
+        : null;
+    const layers = cc && roxctlEnvConsistencyBlockHtml(cc);
+    const summaryLine = detailLineForModule(canonicalId, statusMap, preflight);
+    const sumEsc = summaryLine ? escapeHtml(sanitizeDetailForDisplay(summaryLine)) : "";
+    detailInner = `${sumEsc ? `<div class="sc-overall">${sumEsc}</div>` : ""}${layers || ""}`;
+    if (!String(detailInner).trim()) detailInner = "—";
+  } else if (canonicalId === "secured-cluster") {
     const row = lastStatusModules.find((x) => x && x.id === "secured-cluster");
     const sc = row && row.securedCluster && typeof row.securedCluster === "object" ? row.securedCluster : null;
     const layers = sc && securedClusterLevelsBlockHtml(sc);
@@ -467,40 +561,14 @@ function syncPreflightExpandAllButton() {
   btn.setAttribute("aria-label", "Expand all sections");
 }
 
-async function refreshStatus() {
-  statusWrap.innerHTML = `<p class="pf-v5-c-content pf-m-0" style="color: var(--pf-v5-global--Color--200)">Loading…</p>`;
-  syncPreflightExpandAllButton();
-  const r = await fetch("/api/status");
-  const body = await r.json();
-  if (!r.ok) {
-    const errPre = `<pre class="err">${escapeHtml(JSON.stringify(body, null, 2))}</pre>`;
-    statusWrap.innerHTML = collapsibleSection("Error response", errPre, true);
-    syncPreflightExpandAllButton();
-    return;
-  }
-  const pf = body.preflight;
-  statusWrap.innerHTML = renderPreflight(pf);
-  syncPreflightExpandAllButton();
-
-  const mods = body.modules || [];
-  applyModuleStatuses(mods, pf);
-}
-
-async function runModules(mods) {
-  clearLog();
-  log(`POST /api/run modules=${JSON.stringify(mods)}\n`);
-  const r = await fetch("/api/run", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ modules: mods }),
-  });
+async function drainStreamingRunResponse(r) {
   if (r.status === 409) {
     log(`Error: ${await r.text()}\n`);
-    return;
+    return false;
   }
   if (!r.ok || !r.body) {
     log(`HTTP ${r.status} ${await r.text()}\n`);
-    return;
+    return false;
   }
   const reader = r.body.getReader();
   const dec = new TextDecoder();
@@ -509,20 +577,158 @@ async function runModules(mods) {
     if (done) break;
     log(dec.decode(value, { stream: true }));
   }
-  await refreshStatus();
+  return true;
+}
+
+async function refreshStatus() {
+  const btn = document.getElementById("btnStatus");
+  const ind = document.getElementById("statusRefreshIndicator");
+  clearStatusRefreshInterval();
+
+  const t0 = Date.now();
+  const tick = () => {
+    if (!ind) return;
+    const s = Math.floor((Date.now() - t0) / 1000);
+    ind.textContent = `Refreshing… ${s}s`;
+  };
+
+  if (btn) {
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+  }
+  tick();
+  statusRefreshIntervalId = setInterval(tick, 500);
+
+  statusWrap.innerHTML = `<p class="pf-v5-c-content pf-m-0 status-refresh-loading">Loading…</p>`;
+  syncPreflightExpandAllButton();
+
+  try {
+    const r = await fetch("/api/status");
+    let body;
+    try {
+      body = await r.json();
+    } catch {
+      statusWrap.innerHTML = collapsibleSection(
+        "Error response",
+        `<pre class="err">${escapeHtml("Response was not JSON")}</pre>`,
+        true,
+      );
+      syncPreflightExpandAllButton();
+      return;
+    }
+    if (!r.ok) {
+      const errPre = `<pre class="err">${escapeHtml(JSON.stringify(body, null, 2))}</pre>`;
+      statusWrap.innerHTML = collapsibleSection("Error response", errPre, true);
+      syncPreflightExpandAllButton();
+      return;
+    }
+    const pf = body.preflight;
+    statusWrap.innerHTML = renderPreflight(pf);
+    syncPreflightExpandAllButton();
+
+    const mods = body.modules || [];
+    applyModuleStatuses(mods, pf);
+  } catch (e) {
+    statusWrap.innerHTML = collapsibleSection(
+      "Refresh failed",
+      `<pre class="err">${escapeHtml(String(e))}</pre>`,
+      true,
+    );
+    syncPreflightExpandAllButton();
+  } finally {
+    clearStatusRefreshInterval();
+    if (ind) ind.textContent = "";
+    if (btn) {
+      btn.disabled = false;
+      btn.removeAttribute("aria-busy");
+    }
+  }
+}
+
+function selectionIncludesCentral(slugs) {
+  return slugs.some((s) => canonicalSlugForStatus(String(s)) === "central");
+}
+
+function selectionIncludesRoxctlEnv(slugs) {
+  return slugs.some((s) => canonicalSlugForStatus(String(s)) === "roxctl-env");
+}
+
+/** Confirm writing ~/.roxctl/set-env.sh when running module roxctl-env only. */
+function confirmRoxctlEnvSyncRun() {
+  return window.confirm(
+    [
+      "Run module roxctl-env?",
+      "",
+      "This will update ~/.roxctl/set-env.sh on this machine:",
+      "ROX_ENDPOINT ← OpenShift Central Route (central / stackrox).",
+      "If Central has no active API token named roxctl-admin (env ROXCTL_ADMIN_TOKEN_NAME),",
+      "the script creates one (Admin) using ROX_API_TOKEN or admin password from Secret central-htpasswd (oc),",
+      "and sets ROX_API_TOKEN in that file.",
+      "",
+      "Other unrelated exports are preserved.",
+      "",
+      "Cancel = stop (you can run later by selecting roxctl-env and Run selected).",
+      "OK = proceed.",
+    ].join("\n"),
+  );
+}
+
+/** @returns {boolean} whether user chose to allow ~/.roxctl/set-env.sh ROX_ENDPOINT update */
+function confirmRoxctlEnvUpdate(slugs) {
+  if (!selectionIncludesCentral(slugs)) return false;
+  return window.confirm(
+    [
+      "This run includes the Central module (install-central).",
+      "",
+      "If you click OK, acs-demo-setup.sh will update on this machine:",
+      "  ~/.roxctl/set-env.sh",
+      "",
+      "It will set ROX_ENDPOINT from the OpenShift Route in your current oc context",
+      "(route name \"central\", namespace stackrox — override with CENTRAL_ROUTE_NAME / STACKROX_NAMESPACE in the shell if needed).",
+      "",
+      "Existing lines (e.g. ROX_API_TOKEN) are kept; only ROX_ENDPOINT is added or replaced.",
+      "",
+      "Cancel = run without changing that file.",
+      "OK = update the file after Central install / noop.",
+    ].join("\n"),
+  );
+}
+
+/**
+ * @param {string[]} mods
+ * @param {{ promptRoxctlEnvIfCentral?: boolean }} [opts]
+ */
+async function runModules(mods, opts = {}) {
+  let updateRoxctlEnv = false;
+  if (opts.promptRoxctlEnvIfCentral) {
+    if (selectionIncludesRoxctlEnv(mods) && !confirmRoxctlEnvSyncRun()) return;
+    updateRoxctlEnv = confirmRoxctlEnvUpdate(mods);
+  }
+
+  clearLog();
+  const payload = { modules: mods };
+  if (updateRoxctlEnv) payload.updateRoxctlEnv = true;
+  log(`POST /api/run ${JSON.stringify(payload)}\n`);
+  const r = await fetch("/api/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const ok = await drainStreamingRunResponse(r);
+  if (ok) await refreshStatus();
 }
 
 document.getElementById("btnRun").onclick = async () => {
   const sel = selectedSlugs();
   if (!sel.length) {
-    alert("Select at least one module, or use Run full default.");
+    alert("Select at least one module, or use Run full install.");
     return;
   }
-  await runModules(sel);
+  await runModules(sel, { promptRoxctlEnvIfCentral: true });
 };
 
 document.getElementById("btnRunFull").onclick = async () => {
-  await runModules([]);
+  await runModules([...FULL_INSTALL_SLUGS_ORDERED], { promptRoxctlEnvIfCentral: true });
 };
 
 document.getElementById("btnStatus").onclick = refreshStatus;

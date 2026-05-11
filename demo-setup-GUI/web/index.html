@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ACS demo setup</title>
+  <link rel="icon" href="/favicon.png" type="image/png" sizes="380x380" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@5.4.2/patternfly.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@5.4.2/patternfly-addons.css" />
   <link
@@ -60,7 +61,7 @@
             <div class="demo-actions-row">
               <button class="pf-v5-c-button pf-m-primary" type="button" id="btnRun">Run selected</button>
               <button class="pf-v5-c-button pf-m-secondary" type="button" id="btnRunFull">
-                Run full default (no flags)
+                Run full install
               </button>
             </div>
           </div>
@@ -73,8 +74,11 @@
                 <h2 class="pf-v5-c-card__title-text pf-m-0">Status</h2>
               </div>
             </div>
-            <div class="pf-v5-c-card__actions">
-              <button class="pf-v5-c-button pf-m-secondary" type="button" id="btnStatus">Refresh status</button>
+            <div class="pf-v5-c-card__actions demo-status-actions">
+              <button class="pf-v5-c-button pf-m-secondary" type="button" id="btnStatus">
+                Refresh status
+              </button>
+              <span id="statusRefreshIndicator" class="status-refresh-indicator" aria-live="polite"></span>
             </div>
           </div>
           <div class="pf-v5-c-card__body pf-m-pt-sm">
