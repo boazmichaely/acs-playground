@@ -1,9 +1,9 @@
 # PROJECT_PLAN — ACS demo modular setup + localhost GUI
 
-**Status:** v1 GUI + demo modules **1–5** usable locally; **Splunk (6)** still deferred; **Central bootstrap (`install-central`)** complete; **`install-secured-cluster`** in progress (CRS target — prior init-bundle path may be discarded). See §8.  
+**Status:** v1 GUI + demo modules **1–5** usable locally; **Splunk (6)** still deferred; **Central bootstrap (`install-central`)** complete; **`install-secured-cluster`** implements **CRS → Secret → SecuredCluster CR** (validate in lab). See §8.  
 **Working folder:** `~/code/ACS playground/demo-setup-GUI/`  
-**Script — implementation (where real work happens):** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` (YAML defaults beside it: `central-cr-minimal.yaml`, `secured-cluster-cr-minimal.yaml`). Edit here first; test via CLI and/or the localhost GUI (orchestrator).  
-**Script — GitHub backup (sync from skill):** `demo-setup-GUI/scripts/` holds the same files committed to **acs-playground** so work is not laptop-only — **copy skill → repo** when you want a backup pushed; not the primary edit surface unless you deliberately dual-edit.  
+**RHACS documentation baseline:** **4.10** — https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_security_for_kubernetes/4.10 (detail links in skill **`REFERENCE.md`**).  
+**Script — implementation (only place):** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` (YAML defaults beside it: `central-cr-minimal.yaml`, `secured-cluster-cr-minimal.yaml`). **`demo-setup-GUI`** does **not** carry a copy — GUI spawns that path (or **`ACS_DEMO_SETUP_SCRIPT`**). Skill backup = your skills repo / workflow, not this folder.  
 **Source of truth for behavior:** `acs-demo-setup.sh` only. This doc: **§2** maps demo module **#** + ID → script ( **`1`–`8`** ), plus **bootstrap `--module` names** for RHACS install; **§3** diagram + vocabulary; staged plan; no duplicated install procedure.  
 **Principle:** All work in chat aligns with this document; the agent **appends §8** after every **significant** action (see §8). Log **When** column uses local **`YYYY-MM-DD HH:MM:SS`**.
 
@@ -39,8 +39,8 @@ Headings below match the script’s numbered section comments (e.g. `# ---------
 | **4** | **OCP-OAuth** | `6) OpenShift OAuth auth provider on Central` |
 | **5** | **ACS users** | `4–5) ACS access scope + role` and `7) Group rules` |
 | **6** | **Splunk** | *(deferred)* — Splunk demo skill / scripts; **Stage 6**. Not in `acs-demo-setup.sh` today. |
-| **7** | **Central** | **CLI:** `--module install-central` — **complete**. Applies **Central** custom resource via **`CENTRAL_CR_MANIFEST`** (default **`scripts/central-cr-minimal.yaml`** next to the script). RHACS operator must already be installed. Idempotent noop if a Central CR already exists in `stackrox`. |
-| **8** | **Secured cluster** | **CLI:** `--module install-secured-cluster` — **in progress / needs validation**. Target design: **SecuredCluster CR** reconciled by the operator (**CRS path**; **`SECURED_CLUSTER_CR_MANIFEST`**, default **`scripts/secured-cluster-cr-minimal.yaml`**). Earlier experimental work may have used **init bundle** wiring; that approach may be **redone** to align with CRS-only flow. |
+| **7** | **Central** | **CLI:** `--module install-central` — **complete**. Applies **Central** custom resource via **`CENTRAL_CR_MANIFEST`** (default **`central-cr-minimal.yaml`** next to `acs-demo-setup.sh` in the skill directory). RHACS operator must already be installed. Idempotent noop if a Central CR already exists in `stackrox`. |
+| **8** | **Secured cluster** | **CLI:** `--module install-secured-cluster` — **CRS + CR path coded** (**lab validation** pending). After Central **Available**: **`POST /v1/cluster-init/crs`** (unless **`cluster-registration-secret`** exists), apply CRS YAML, then **SecuredCluster** CR via **`SECURED_CLUSTER_CR_MANIFEST`** (default **`secured-cluster-cr-minimal.yaml`** beside the script in the skill dir). Env **`CRS_GENERATION_NAME`** (default **`acs-demo-setup-crs`**). |
 
 **Bootstrap sequence (greenfield, when both selected):** **`install-central` → `install-secured-cluster` →** demo modules **1 → 2 → 3 → 4 → 5** (canonical order in script).
 
@@ -48,7 +48,7 @@ Headings below match the script’s numbered section comments (e.g. `# ---------
 
 **Full default install order (v1, Central already exists):** preflight → **1 → 2 → 3 → 4 → 5**. In-file, §4–5 appear before §6; modular runs run **4** before **5**’s bundle — same operations, different sequence.
 
-**Deferred:** **6** via Stage 6. **7** complete (CLI); **8** active development (CLI).
+**Deferred:** **6** via Stage 6. **7** complete (CLI); **8** CRS+CR flow implemented — **lab validation** pending.
 
 ---
 
@@ -90,7 +90,7 @@ Plain picture if Mermaid does not render:
 - **Secrets:** Do not commit `ACS_ADMIN_PASSWORD`, kubeconfigs, or generated user passwords. Env-based injection only; consider log redaction in a hardening stage.  
 - **Browser:** The UI does not get direct OS access; a **127.0.0.1** server runs the script and streams output.  
 - **Concurrency:** At most **one** install run at a time (queue or HTTP 409) to avoid overlapping `oc` / `roxctl`.  
-- **Skill vs repo vs GUI:** **Implementation** = Cursor **skill** `scripts/acs-demo-setup.sh` (RHACS/OpenShift logic). **acs-playground** `demo-setup-GUI/scripts/` = **backup** of that script + YAMLs (commit after meaningful skill changes). **`demo-setup-GUI`** otherwise = **orchestrator only** (Flask + static UI that **spawns** the bash script). **`run-gui.sh` / Flask** default to the **skill** script path so the GUI exercises what you are editing.
+- **Skill vs GUI:** **Implementation** = Cursor **skill** only (`acs-demo-setup.sh` + YAMLs). **`demo-setup-GUI`** = **orchestrator only** (Flask + static UI). **`run-gui.sh` / Flask** default to the **skill** path; set **`ACS_DEMO_SETUP_SCRIPT`** if the script lives elsewhere.
 
 ### Design guidelines — GUI module manifest
 
@@ -196,8 +196,8 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 ### Stage 8 — Modules **7–8** (Central, Secured cluster)
 
 **Deliverable:**  
-- **`install-central` — done:** CR apply path documented in **§2**; manifests in **`scripts/`**.  
-- **`install-secured-cluster` — in flight:** finish **CRS**-based SecuredCluster flow in script + manifests; reconcile any prior **init-bundle**-based experiment (may be removed). Later: GUI **run** wiring; **`--status`** already surfaces registration row.
+- **`install-central` — done:** CR apply path documented in **§2**; manifests beside the script in the **skill** directory.  
+- **`install-secured-cluster` — CRS + CR apply implemented** in script (Central API CRS, Secret apply, SecuredCluster CR); **lab proof** still required. Later: GUI **run** wiring; **`--status`** already surfaces registration row.
 
 **Proof:** §8 entries record bootstrap milestones (central complete → secured-cluster CRS validated).
 
@@ -215,8 +215,6 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 | Path | Purpose |
 |------|--------|
 | `README.md` | Pointers + **how to run the GUI** |
-| `scripts/acs-demo-setup.sh` | **GitHub backup** of the skill bootstrap script (keep in sync with skill when committing) |
-| `scripts/*.yaml` | Backup CR manifests (skill dir is primary alongside live script) |
 | `docs/PROJECT_PLAN.md` | This plan + Progress log |
 | `run-gui.sh` | Starts Flask UI (`server/app.py`) using `server/.venv` |
 | `server/app.py` | `127.0.0.1` API + static `web/` |
@@ -239,6 +237,8 @@ Each stage has **deliverables**, **proof** (exit criteria), and **do not proceed
 | 2026-05-05 23:37:07 | **Checkpoint — phase complete:** **`modules.json`** catalogs **1–8** ( **`ocp-oauth`** slug for script; label shows **ocp-OAuth** ); deferred rows **6–8** visible in UI; **`POST /api/run`** returns **501** if **splunk** / **central** / **secured-cluster** selected until implemented. Repo backed up on GitHub (**`boazmichaely/acs-playground`**). | **Next:** **Splunk** (**module 6**) — wire Splunk skill/scripts into run/status; then **Central** (**7**) + **secured cluster** (**8**) per Stage 8 mini-plan. |
 | 2026-05-07 15:49:03 | **`install-central` complete** (CLI **`--module install-central`** — Central CR apply path). **`acs-demo-setup.sh`** + **`central-cr-minimal.yaml`** + **`secured-cluster-cr-minimal.yaml`** copied into **`demo-setup-GUI/scripts/`** and committed — **canonical GitHub backup** per project guidance; **`PROJECT_PLAN`** §2 / Stage 8 / §7 updated. **`install-secured-cluster` mid-way:** validate **operator SecuredCluster CR (CRS)** flow; earlier **init-bundle**-oriented code may need **redo/removal**. GUI still **501** for central/secured-cluster **run** until wired. | **Next:** code + test **`install-secured-cluster`** (CRS), sync skill mirror if desired, then GUI run wiring when ready. |
 | 2026-05-07 16:57:20 | **Roles clarified:** **`demo-setup-GUI`** = orchestrator only (Flask + UI spawning bash). **Skill** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` = **implementation** (iterate here first). **`demo-setup-GUI/scripts/`** = **GitHub backup** (copy skill → repo to push). Docs + **`run-gui.sh`** + Flask **`default_script_path`** updated to **prefer skill** by default. | **Next:** continue **`install-secured-cluster`** coding/tests on skill script; refresh repo **`scripts/`** when backing up. |
+| 2026-05-11 12:00:00 | **`install-secured-cluster`:** after Central **Available**, script now generates CRS via **`POST /v1/cluster-init/crs`** (unless Secret **`cluster-registration-secret`** already exists in **`stackrox`** / **`STACKROX_NAMESPACE`**), **`oc apply`** CRS YAML, then applies **SecuredCluster** CR; env **`CRS_GENERATION_NAME`** (default **`acs-demo-setup-crs`**). **`--status`** resolver honors **`ACS_SECURED_CLUSTER_NAME`**. Skill script synced to **`demo-setup-GUI/scripts/acs-demo-setup.sh`**. | **Next:** lab validate on live Central 4.10; GUI **501** removal for secured-cluster **run** when ready. |
+| 2026-05-11 18:00:00 | **Removed `demo-setup-GUI/scripts/`** duplicate (`acs-demo-setup.sh`, CR YAMLs). Implementation stays **skill-only**; GUI **`run-gui.sh`** / **`server/app.py`** use skill path or **`ACS_DEMO_SETUP_SCRIPT`**. Docs (**§1 header, §4, §7, §2 paths**) updated — no second copy in this repo. | |
 
 ---
 

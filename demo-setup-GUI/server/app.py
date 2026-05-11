@@ -16,15 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 CONFIG = ROOT / "config" / "modules.json"
 
-_REPO_SCRIPT = ROOT / "scripts" / "acs-demo-setup.sh"
 _SKILL_SCRIPT = Path.home() / ".cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh"
 
 
 def default_script_path() -> Path:
-    """Implementation lives in the Cursor skill; repo copy is GitHub backup only."""
-    if _SKILL_SCRIPT.is_file():
-        return _SKILL_SCRIPT
-    return _REPO_SCRIPT
+    """Bootstrap script lives in the Cursor skill only; override with ACS_DEMO_SETUP_SCRIPT."""
+    return _SKILL_SCRIPT
 
 # Slugs accepted from modules.json / UI (must match script + manifest).
 KNOWN_MODULE_SLUGS = frozenset(
@@ -96,7 +93,13 @@ def api_modules():
 def api_status():
     sp = script_path()
     if not sp.is_file():
-        return jsonify({"error": f"script not found: {sp}"}), 500
+        return jsonify(
+            {
+                "error": "script not found",
+                "path": str(sp),
+                "hint": "Install or restore ~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh or set ACS_DEMO_SETUP_SCRIPT.",
+            }
+        ), 500
     env = subprocess_env()
     try:
         out = subprocess.run(
@@ -133,7 +136,13 @@ def api_run():
     global _running
     sp = script_path()
     if not sp.is_file():
-        return jsonify({"error": f"script not found: {sp}"}), 500
+        return jsonify(
+            {
+                "error": "script not found",
+                "path": str(sp),
+                "hint": "Install or restore ~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh or set ACS_DEMO_SETUP_SCRIPT.",
+            }
+        ), 500
 
     body = request.get_json(silent=True) or {}
     mods_raw = body.get("modules")

@@ -1,59 +1,41 @@
-# ACS demo setup — GUI project (working folder)
+# ACS demo setup — localhost GUI
 
-This directory holds **documentation and (later) code** for a localhost web UI and API that orchestrates the existing ACS demo bootstrap script. The **bash script remains the implementation** in the Cursor skill; this repo tracks the GUI/backend work and written plans only.
+Flask on **`127.0.0.1`** + static UI. It **spawns** `acs-demo-setup.sh`; all cluster/Central logic stays in the **Cursor skill** (not in this repo).
 
-## Canonical paths
+## Paths
 
 | What | Where |
 |------|--------|
-| Bootstrap script (**implementation — edit here**) | `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` (+ YAML defaults in that folder) |
-| Same script + YAMLs (**GitHub backup** in this repo) | **`demo-setup-GUI/scripts/`** — copy from the skill path before commit when you want **acs-playground** updated |
-| Skill metadata / workflow notes | `~/.cursor/skills/acs-demo-setup/SKILL.md` |
-| **Orchestrator only** (no cluster logic here) | **`demo-setup-GUI/`** — Flask API + static UI that **runs** the bash script |
+| Bootstrap (**implementation**) | `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` (+ `central-cr-minimal.yaml`, `secured-cluster-cr-minimal.yaml`) |
+| Skill notes | `~/.cursor/skills/acs-demo-setup/SKILL.md`, **`REFERENCE.md`** |
+| Plan / module map | **`docs/PROJECT_PLAN.md`** (§2 modules, §8 log) |
 
-## Default behavior (non-negotiable)
+Override: **`ACS_DEMO_SETUP_SCRIPT`** → path to `acs-demo-setup.sh`. Default is the skill path above. **`run-gui.sh`** exits if that file is missing and the env var is unset.
 
-Until explicitly changed in the skill script and documented here: **running the script with no module flags must behave as today — install everything** (full demo path). Any modular flags are **additive opt-in**; the default invocation is all modules in the correct dependency order.
+## Env (same idea as the script)
 
-**Module numbers `1`–`8`** (names + script map + **6–8** deferred) are in **`docs/PROJECT_PLAN.md` §2**.
+Load what you use on the CLI (e.g. **`ACS_CENTRAL_URL`**, **`ROX_API_TOKEN`** or **`ACS_ADMIN_PASSWORD`**, **`KUBECONFIG`**). See the script file header for the full list.
 
-## Where to read first (pause / resume)
-
-**`docs/PROJECT_PLAN.md`** — staged plan, exit criteria, and **§8 Progress log** (append-only; each row **When** = **`YYYY-MM-DD HH:MM:SS`** local).
-
-After a break: read **§8 from the bottom** for latest state and **next** action.
-
-## Run the GUI (Stage 4)
-
-The backend only **starts** `acs-demo-setup.sh` — same as running it in a terminal. Preflight (OpenShift, Central, env) is implemented **inside the script** (`--status` JSON); the GUI displays that payload.
-
-Start from a shell where your demo env is loaded (`ACS_CENTRAL_URL`, credentials, etc.):
+## Run
 
 ```bash
 cd ~/code/ACS\ playground/demo-setup-GUI
-# one-time:
 python3 -m venv server/.venv
 server/.venv/bin/pip install -r server/requirements.txt
 ./run-gui.sh
 ```
 
-`run-gui.sh` sets a default **`KUBECONFIG`** and prepends common Homebrew **`PATH`** entries so the **script subprocess** can find `oc`/`curl` when the GUI server has a minimal PATH. Override if needed:
+Optional: **`ACS_GUI_PORT`**, **`ACS_GUI_BIND`**, **`ACS_GUI_EXTRA_PATH`** (prepend to PATH for `oc`/`curl` in subprocesses).
 
-```bash
-export ACS_GUI_EXTRA_PATH="/directory/containing/oc"
-```
+Open **http://127.0.0.1:8765** (unless you changed port/bind).
 
-Open **http://127.0.0.1:8765** — **Refresh status** runs **`acs-demo-setup.sh --status`** and shows preflight + modules.
+## What the UI does
 
-The UI uses **PatternFly 5** (jsDelivr) plus project-local **`web/demo-setup.css`** (layout/tokens aligned with ACS-style prototypes; no dependency on other repos).
+- **Refresh status** → **`acs-demo-setup.sh --status`** → preflight JSON + per-module rows (secured-cluster includes **`securedCluster.levels`** in the payload; the table shows a compact layer summary).
+- **Run** → passes **`--module`** for checked rows; only **`ms-demo`**, **`registries`**, **`ocp-users`**, **`ocp-oauth`**, **`acs-users`** are implemented from the GUI (**501** for others until wired).
 
-**Run full default** calls the script with **no** `--module` flags (same as CLI default).
+Full default run (no modules) = script default (demo modules **1→5** only — Central install modules are CLI-only unless you add flags yourself).
 
-Override script path: `export ACS_DEMO_SETUP_SCRIPT=/path/to/acs-demo-setup.sh`  
-Default if unset: **skill** script `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` (so the GUI drives the copy you are iterating on).
+## Docs / roadmap
 
-Optional: `ACS_GUI_PORT=9000 ./run-gui.sh`
-
-## Review
-
-Plan: **`docs/PROJECT_PLAN.md`**. Implementation through **Stage 4** is ready for your UI review; Stage 5 (structured progress lines) not built yet.
+**`docs/PROJECT_PLAN.md`** — stages, §8 progress. Things like structured progress lines from the script are **not** implemented unless noted there.

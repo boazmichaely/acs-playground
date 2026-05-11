@@ -18,6 +18,8 @@ const DEFERRED_MODULE_SLUGS = new Set(["splunk"]);
 let moduleMetaByCanonical = new Map();
 
 let lastStatusMap = new Map();
+/** Full `modules` array from last `/api/status` (includes securedCluster breakdown). */
+let lastStatusModules = [];
 let lastPreflight = null;
 
 function log(line) {
@@ -218,6 +220,43 @@ function detailLineForModule(canonicalId, statusMap, preflight) {
   return st && st.detail ? st.detail : "";
 }
 
+const SC_LEVEL_ORDER = ["crs_secret", "securedcluster_cr", "workloads", "central_registration"];
+const SC_LEVEL_LABEL = {
+  crs_secret: "CRS",
+  securedcluster_cr: "CR",
+  workloads: "Pods",
+  central_registration: "Central",
+};
+
+/** Compact collapsible for `modules[].securedCluster` (script `--status`). */
+function securedClusterLevelsBlockHtml(sc) {
+  const levels = sc && sc.levels && typeof sc.levels === "object" ? sc.levels : null;
+  if (!levels) return "";
+
+  const summaryBits = SC_LEVEL_ORDER.map((k) => {
+    const L = levels[k];
+    const st = L && L.state != null ? String(L.state) : "—";
+    return `${SC_LEVEL_LABEL[k] || k}:${st}`;
+  });
+
+  const rows = SC_LEVEL_ORDER.map((k) => {
+    const L = levels[k];
+    const state = L && L.state != null ? String(L.state) : "—";
+    const det = sanitizeDetailForDisplay(L && L.detail ? L.detail : "");
+    const name = SC_LEVEL_LABEL[k] || k;
+    const stCls = ["ready", "partial", "absent", "unknown"].includes(state) ? state : "unknown";
+    return `<div class="sc-level"><span class="sc-level__name">${escapeHtml(name)}</span><span class="sc-level__state sc-level__state--${stCls}">${escapeHtml(state)}</span><span class="sc-level__det">${escapeHtml(det)}</span></div>`;
+  }).join("");
+
+  const ov = sc.overall && typeof sc.overall === "object" ? sc.overall : null;
+  const blocked =
+    ov && ov.blocked_reason != null && String(ov.blocked_reason).trim() !== ""
+      ? `<div class="sc-blocked">blocked: ${escapeHtml(String(ov.blocked_reason).trim())}</div>`
+      : "";
+
+  return `<details class="sc-levels"><summary class="sc-levels__sum">${escapeHtml(summaryBits.join(" · "))}</summary><div class="sc-levels__body">${rows}</div>${blocked}</details>`;
+}
+
 function badgeOnlyHtml(canonicalId, statusMap) {
   if (DEFERRED_MODULE_SLUGS.has(canonicalId)) {
     return `<span class="module-status-badge module-status-badge--deferred">Deferred</span>`;
@@ -243,16 +282,32 @@ function badgeOnlyHtml(canonicalId, statusMap) {
 }
 
 function moduleStatusCellInnerHtml(canonicalId, statusMap, preflight) {
-  const detailRaw = detailLineForModule(canonicalId, statusMap, preflight);
-  const cleaned = sanitizeDetailForDisplay(detailRaw);
-  const detailDisp = cleaned ? escapeHtml(cleaned) : "—";
+  const badge = badgeOnlyHtml(canonicalId, statusMap);
+  let detailInner = "";
+  if (canonicalId === "secured-cluster") {
+    const row = lastStatusModules.find((x) => x && x.id === "secured-cluster");
+    const sc = row && row.securedCluster && typeof row.securedCluster === "object" ? row.securedCluster : null;
+    const layers = sc && securedClusterLevelsBlockHtml(sc);
+    const summaryLine = detailLineForModule(canonicalId, statusMap, preflight);
+    const sumEsc = summaryLine ? escapeHtml(sanitizeDetailForDisplay(summaryLine)) : "";
+    if (layers) {
+      detailInner = `${sumEsc ? `<div class="sc-overall">${sumEsc}</div>` : ""}${layers}`;
+    } else {
+      detailInner = sumEsc || "—";
+    }
+  } else {
+    const detailRaw = detailLineForModule(canonicalId, statusMap, preflight);
+    const cleaned = sanitizeDetailForDisplay(detailRaw);
+    detailInner = cleaned ? escapeHtml(cleaned) : "—";
+  }
   return `<div class="module-status-split">
-    <div class="module-status-split__badge">${badgeOnlyHtml(canonicalId, statusMap)}</div>
-    <div class="module-status-split__detail">${detailDisp}</div>
+    <div class="module-status-split__badge">${badge}</div>
+    <div class="module-status-split__detail">${detailInner}</div>
   </div>`;
 }
 
 function applyModuleStatuses(statusModules, preflight) {
+  lastStatusModules = Array.isArray(statusModules) ? statusModules : [];
   const map = statusMapFromModules(statusModules);
   lastStatusMap = map;
   lastPreflight = preflight && typeof preflight === "object" ? preflight : null;
