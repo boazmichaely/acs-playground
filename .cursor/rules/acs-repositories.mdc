@@ -15,3 +15,9 @@ There are **two separate Git remotes**. Implementation vs GUI stay split.
 - **Bootstrap edits:** only under **`~/.cursor/skills/acs-demo-setup/`** — commit from **`~/.cursor/skills`** (parent repo), not a nested repo inside `acs-demo-setup/`.
 - **GUI edits:** under **`demo-setup-GUI/`** — commit/push **acs-playground**.
 - **Do not** create a third repo or re-add **`demo-setup-GUI/scripts/`** copies of the skill; GUI uses the skill path or **`ACS_DEMO_SETUP_SCRIPT`**.
+
+## `my-cursor-skills` mirrors disk — with normal Git caveats
+
+- **Top-level skill folders** under **`~/.cursor/skills`** are what Git tracks (each skill is a subdirectory). After **creating a new skill folder**, run **`git add <folder>`** from **`~/.cursor/skills`** so the repo stays aligned with disk—Git does not auto-include new paths.
+- **Not every file on disk is in Git:** root **`.gitignore`** excludes secrets, **`*.bak*`**, **`.venv/`**, **`__pycache__/`**, etc. So the repo reflects **skill source layout**, not a byte-identical dump of the whole directory.
+- **Never `git init` inside a single skill subfolder** (e.g. `acs-demo-setup/.git`); that nests a second repo and breaks the monorepo model.
