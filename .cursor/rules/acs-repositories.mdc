@@ -1,0 +1,17 @@
+---
+description: Where ACS playground vs Cursor skills are versioned (two GitHub repos)
+alwaysApply: true
+---
+
+# Repositories — do not conflate
+
+There are **two separate Git remotes**. Implementation vs GUI stay split.
+
+| Repo | GitHub | Workspace path | Contents |
+|------|--------|----------------|----------|
+| **acs-playground** | https://github.com/boazmichaely/acs-playground | `~/code/ACS playground` | **`demo-setup-GUI/`** (Flask + UI only), docs, misc repo scripts. **No** copy of `acs-demo-setup.sh` here. |
+| **my-cursor-skills** | https://github.com/boazmichaely/my-cursor-skills | `~/.cursor/skills` (git root) | All Cursor skills; **`acs-demo-setup/`** holds `acs-demo-setup.sh`, CR YAMLs, `SKILL.md`, `REFERENCE.md`. |
+
+- **Bootstrap edits:** only under **`~/.cursor/skills/acs-demo-setup/`** — commit from **`~/.cursor/skills`** (parent repo), not a nested repo inside `acs-demo-setup/`.
+- **GUI edits:** under **`demo-setup-GUI/`** — commit/push **acs-playground**.
+- **Do not** create a third repo or re-add **`demo-setup-GUI/scripts/`** copies of the skill; GUI uses the skill path or **`ACS_DEMO_SETUP_SCRIPT`**.

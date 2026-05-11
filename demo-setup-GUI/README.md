@@ -10,6 +10,8 @@ Flask on **`127.0.0.1`** + static UI. It **spawns** `acs-demo-setup.sh`; all clu
 | Skill notes | `~/.cursor/skills/acs-demo-setup/SKILL.md`, **`REFERENCE.md`** |
 | Plan / module map | **`docs/PROJECT_PLAN.md`** (§2 modules, §8 log) |
 
+**Repos:** this tree → **acs-playground** (https://github.com/boazmichaely/acs-playground). Skill → **`my-cursor-skills`** (https://github.com/boazmichaely/my-cursor-skills); commit from **`~/.cursor/skills`**. Workspace rule: **`../.cursor/rules/acs-repositories.mdc`** (from repo root).
+
 Override: **`ACS_DEMO_SETUP_SCRIPT`** → path to `acs-demo-setup.sh`. Default is the skill path above. **`run-gui.sh`** exits if that file is missing and the env var is unset.
 
 ## Env (same idea as the script)

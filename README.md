@@ -4,6 +4,15 @@ Personal ACS / RHACS experiments.
 
 **Secrets:** Do not commit tokens. Use a gitignored env file or exports as each script expects.
 
+## Git repositories (two remotes — agents & humans)
+
+| Repo | Remote | What lives here |
+|------|--------|------------------|
+| **acs-playground** | https://github.com/boazmichaely/acs-playground | This workspace: **`demo-setup-GUI/`** orchestrator only (no bash bootstrap copy). |
+| **my-cursor-skills** | https://github.com/boazmichaely/my-cursor-skills | **`~/.cursor/skills`** — includes **`acs-demo-setup/`** (`acs-demo-setup.sh`, YAMLs, skill docs). Commit skill changes from the **parent** `skills` directory. |
+
+Workspace rule (always loaded in Cursor): **`.cursor/rules/acs-repositories.mdc`**.
+
 ## Layout
 
 | Piece | Where |

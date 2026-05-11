@@ -2,6 +2,7 @@
 
 **Status:** v1 GUI + demo modules **1–5** usable locally; **Splunk (6)** still deferred; **Central bootstrap (`install-central`)** complete; **`install-secured-cluster`** implements **CRS → Secret → SecuredCluster CR** (validate in lab). See §8.  
 **Working folder:** `~/code/ACS playground/demo-setup-GUI/`  
+**Git:** GUI + plans → **acs-playground** (https://github.com/boazmichaely/acs-playground). Bootstrap skill → **`my-cursor-skills`** at **`~/.cursor/skills`** (https://github.com/boazmichaely/my-cursor-skills), subdirectory **`acs-demo-setup/`**. See repo **`.cursor/rules/acs-repositories.mdc`**.  
 **RHACS documentation baseline:** **4.10** — https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_security_for_kubernetes/4.10 (detail links in skill **`REFERENCE.md`**).  
 **Script — implementation (only place):** `~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh` (YAML defaults beside it: `central-cr-minimal.yaml`, `secured-cluster-cr-minimal.yaml`). **`demo-setup-GUI`** does **not** carry a copy — GUI spawns that path (or **`ACS_DEMO_SETUP_SCRIPT`**). Skill backup = your skills repo / workflow, not this folder.  
 **Source of truth for behavior:** `acs-demo-setup.sh` only. This doc: **§2** maps demo module **#** + ID → script ( **`1`–`8`** ), plus **bootstrap `--module` names** for RHACS install; **§3** diagram + vocabulary; staged plan; no duplicated install procedure.  
