@@ -239,6 +239,20 @@ body {
   color: var(--pf-v5-global--Color--100);
 }
 
+.module-detail-link {
+  word-break: break-all;
+}
+
+.module-route-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.module-route-host {
+  color: var(--pf-v5-global--Color--200);
+  font-size: var(--pf-v5-global--FontSize--xs);
+}
+
 .demo-status-actions {
   display: flex;
   align-items: center;
@@ -705,4 +719,17 @@ details.pf-block .pfBanner {
 
 details.pf-block table.status {
   margin-top: var(--pf-v5-global--spacer--xs);
+}
+
+.ocp-users-pw-row {
+  font-size: var(--pf-v5-global--FontSize--xs);
+}
+
+.ocp-users-pw-login {
+  font-weight: var(--pf-v5-global--FontWeight--bold);
+  margin-right: 0.35rem;
+}
+
+.ocp-users-pw-code {
+  word-break: break-all;
 }

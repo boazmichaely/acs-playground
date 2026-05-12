@@ -7,6 +7,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import re
 import signal
 import subprocess
 import threading
@@ -19,11 +20,20 @@ WEB = ROOT / "web"
 CONFIG = ROOT / "config" / "modules.json"
 
 _SKILL_SCRIPT = Path.home() / ".cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh"
+_SPLUNK_LAB_SCRIPT = Path.home() / ".cursor/skills/rhacs-splunk-ta-demo-skill/scripts/splunk-lab.sh"
 
 
 def default_script_path() -> Path:
     """Bootstrap script lives in the Cursor skill only; override with ACS_DEMO_SETUP_SCRIPT."""
     return _SKILL_SCRIPT
+
+
+def splunk_script_path() -> Path:
+    """Splunk lab install/status; override with ACS_SPLUNK_LAB_SCRIPT."""
+    return Path(os.environ.get("ACS_SPLUNK_LAB_SCRIPT", str(_SPLUNK_LAB_SCRIPT))).expanduser()
+
+# Manifest id → slug expected by acs-demo-setup.sh / --status (single source for the GUI; echoed in GET /api/modules).
+MODULE_ID_CANONICAL_ALIASES: dict[str, str] = {"ocp-OAuth": "ocp-oauth"}
 
 # Slugs accepted from modules.json / UI (must match script + manifest).
 KNOWN_MODULE_SLUGS = frozenset(
@@ -33,13 +43,14 @@ KNOWN_MODULE_SLUGS = frozenset(
         "ocp-users",
         "ocp-oauth",
         "acs-users",
+        "slack-notifier",
         "splunk",
         "central",
         "roxctl-env",
         "secured-cluster",
     }
 )
-# Wired to acs-demo-setup.sh --module (Splunk still CLI-only via skill scripts).
+# Wired to acs-demo-setup.sh --module (incl. slack-notifier); Splunk uses rhacs-splunk-ta-demo-skill/scripts/splunk-lab.sh.
 RUNNABLE_SLUGS = frozenset(
     {
         "central",
@@ -50,6 +61,8 @@ RUNNABLE_SLUGS = frozenset(
         "ocp-users",
         "ocp-oauth",
         "acs-users",
+        "slack-notifier",
+        "splunk",
     }
 )
 DEFERRED_SLUGS = KNOWN_MODULE_SLUGS - RUNNABLE_SLUGS
@@ -57,9 +70,27 @@ DEFERRED_SLUGS = KNOWN_MODULE_SLUGS - RUNNABLE_SLUGS
 
 def canonical_module_slug(slug: str) -> str:
     """Map manifest/UI aliases to the slugs expected by acs-demo-setup.sh."""
-    # Bash script only accepts lowercase ocp-oauth; allow ocp-OAuth in modules.json id/label style.
-    aliases = {"ocp-OAuth": "ocp-oauth"}
-    return aliases.get(slug, slug)
+    return MODULE_ID_CANONICAL_ALIASES.get(slug, slug)
+
+
+def _sanitize_status_detail(s: str) -> str:
+    """Match acs-demo-setup.sh --status: strip opaque API ids from human-facing detail strings."""
+    t = s if isinstance(s, str) else str(s)
+    t = re.sub(
+        r"\bid\s*=\s*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+        "",
+        t,
+        flags=re.I,
+    )
+    t = re.sub(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        "",
+        t,
+    )
+    t = re.sub(r"\(\s*\)", "", t)
+    t = re.sub(r"\s{2,}", " ", t).strip()
+    t = re.sub(r"^[,;\s]+|[,;\s]+$", "", t)
+    return t
 
 
 def script_module_argument(canonical_slug: str) -> str:
@@ -140,6 +171,52 @@ def script_path() -> Path:
     return Path(p).expanduser()
 
 
+def merge_splunk_status(data: dict) -> dict:
+    """Append/replace `splunk` module row from splunk-lab.sh --status (skill tree)."""
+    spl = splunk_script_path()
+    if not spl.is_file():
+        return data
+    try:
+        out = subprocess.run(
+            [str(spl), "--status"],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+            env=subprocess_env(),
+        )
+    except subprocess.TimeoutExpired:
+        row: dict = {"id": "splunk", "state": "unknown", "detail": "Splunk status subprocess timed out"}
+    else:
+        if out.returncode != 0:
+            tail = (out.stderr or out.stdout or "splunk-lab.sh --status failed").strip()
+            row = {"id": "splunk", "state": "unknown", "detail": tail[:450]}
+        else:
+            try:
+                extra = json.loads(out.stdout)
+            except json.JSONDecodeError:
+                row = {"id": "splunk", "state": "unknown", "detail": "invalid JSON from splunk-lab.sh --status"}
+            else:
+                rows = extra.get("modules") if isinstance(extra, dict) else None
+                if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+                    row = dict(rows[0])
+                else:
+                    row = {"id": "splunk", "state": "unknown", "detail": "empty modules from splunk-lab.sh --status"}
+    if isinstance(row.get("detail"), str):
+        row["detail"] = _sanitize_status_detail(row["detail"])
+    mods = list(data.get("modules") or [])
+    replaced = False
+    for i, m in enumerate(mods):
+        if isinstance(m, dict) and m.get("id") == "splunk":
+            mods[i] = row
+            replaced = True
+            break
+    if not replaced:
+        mods.append(row)
+    data["modules"] = mods
+    return data
+
+
 @app.get("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
@@ -149,7 +226,15 @@ def index():
 def api_modules():
     if not CONFIG.is_file():
         return jsonify({"error": "modules.json missing"}), 404
-    return Response(CONFIG.read_text(), mimetype="application/json")
+    try:
+        data = json.loads(CONFIG.read_text())
+    except json.JSONDecodeError:
+        return jsonify({"error": "invalid modules.json"}), 500
+    if not isinstance(data, dict):
+        return jsonify({"error": "modules.json must be a JSON object"}), 500
+    out = dict(data)
+    out["canonicalAliases"] = dict(MODULE_ID_CANONICAL_ALIASES)
+    return jsonify(out)
 
 
 @app.get("/api/status")
@@ -191,22 +276,13 @@ def api_status():
         data = json.loads(out.stdout)
     except json.JSONDecodeError:
         return jsonify({"error": "invalid JSON from script", "raw": out.stdout[-8000:]}), 500
+    merge_splunk_status(data)
     return jsonify(data)
 
 
 @app.post("/api/run")
 def api_run():
     global _running
-    sp = script_path()
-    if not sp.is_file():
-        return jsonify(
-            {
-                "error": "script not found",
-                "path": str(sp),
-                "hint": "Install or restore ~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh or set ACS_DEMO_SETUP_SCRIPT.",
-            }
-        ), 500
-
     body = request.get_json(silent=True) or {}
     mods_raw = body.get("modules")
     if mods_raw is None:
@@ -224,11 +300,34 @@ def api_run():
                 jsonify(
                     {
                         "error": f"module not implemented yet: {m}",
-                        "detail": "This module is not wired for GUI runs yet; use acs-demo-setup.sh or the Splunk skill from a terminal.",
+                        "detail": "This module is not wired for GUI runs yet.",
                     }
                 ),
                 501,
             )
+
+    acs_mods = [m for m in mods if m != "splunk"]
+    splunk_sel = "splunk" in mods
+
+    sp = script_path()
+    if acs_mods and not sp.is_file():
+        return jsonify(
+            {
+                "error": "script not found",
+                "path": str(sp),
+                "hint": "Install or restore ~/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh or set ACS_DEMO_SETUP_SCRIPT.",
+            }
+        ), 500
+
+    sl = splunk_script_path()
+    if splunk_sel and not sl.is_file():
+        return jsonify(
+            {
+                "error": "splunk-lab.sh not found",
+                "path": str(sl),
+                "hint": "Install rhacs-splunk-ta-demo-skill/scripts/splunk-lab.sh or set ACS_SPLUNK_LAB_SCRIPT.",
+            }
+        ), 500
 
     if not _lock.acquire(blocking=False):
         return jsonify({"error": "a run is already in progress"}), 409
@@ -238,31 +337,64 @@ def api_run():
         global _running, _active_run_proc
         proc: subprocess.Popen | None = None
         try:
-            cmd = [str(sp)]
-            if update_roxctl_env:
-                cmd.append("--update-roxctl-env")
-            for m in mods:
-                cmd.extend(["--module", script_module_argument(m)])
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env=subprocess_env(),
-                start_new_session=True,
-            )
-            with _active_run_proc_lock:
-                _active_run_proc = proc
-            assert proc.stdout is not None
-            try:
-                for line in proc.stdout:
-                    yield line
-            finally:
-                if proc.stdout:
-                    proc.stdout.close()
-            rc = proc.wait()
-            yield f"\n___EXIT_CODE_{rc}___\n"
+            if acs_mods:
+                cmd = [str(sp)]
+                if update_roxctl_env:
+                    cmd.append("--update-roxctl-env")
+                for m in acs_mods:
+                    cmd.extend(["--module", script_module_argument(m)])
+                run_env = subprocess_env()
+                if "ocp-users" in acs_mods:
+                    run_env = dict(run_env)
+                    run_env["REGENERATE_HTPASSWD"] = "true"
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    env=run_env,
+                    start_new_session=True,
+                )
+                with _active_run_proc_lock:
+                    _active_run_proc = proc
+                assert proc.stdout is not None
+                try:
+                    for line in proc.stdout:
+                        yield line
+                finally:
+                    if proc.stdout:
+                        proc.stdout.close()
+                rc_acs = proc.wait()
+                yield f"\n___EXIT_CODE_{rc_acs}___\n"
+                proc = None
+                with _active_run_proc_lock:
+                    _active_run_proc = None
+                if rc_acs != 0:
+                    return
+
+            if splunk_sel:
+                yield "\n==> [GUI] Splunk lab (splunk-lab.sh install)\n"
+                proc = subprocess.Popen(
+                    [str(sl), "install"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    env=subprocess_env(),
+                    start_new_session=True,
+                )
+                with _active_run_proc_lock:
+                    _active_run_proc = proc
+                assert proc.stdout is not None
+                try:
+                    for line in proc.stdout:
+                        yield line
+                finally:
+                    if proc.stdout:
+                        proc.stdout.close()
+                rc_sp = proc.wait()
+                yield f"\n___EXIT_CODE_{rc_sp}___\n"
         except GeneratorExit:
             if proc is not None and proc.poll() is None:
                 try:
@@ -279,8 +411,7 @@ def api_run():
             raise
         finally:
             with _active_run_proc_lock:
-                if _active_run_proc is proc:
-                    _active_run_proc = None
+                _active_run_proc = None
             _running = False
             _lock.release()
 
@@ -292,6 +423,7 @@ def main():
     port = int(os.environ.get("ACS_GUI_PORT", "8765"))
     print(f"ACS demo GUI  http://{host}:{port}")
     print(f"Script: {script_path()}")
+    print(f"Splunk lab: {splunk_script_path()}")
     app.run(host=host, port=port, threaded=True, debug=False)
 
 

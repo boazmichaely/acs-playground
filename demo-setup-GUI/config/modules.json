@@ -33,7 +33,7 @@
     {
       "number": 6,
       "id": "ocp-users",
-      "label": "ocp-users — HTPasswd + IdP + RBAC",
+      "label": "ocp-users — regenerate HTPasswd + IdP + RBAC",
       "dependsOn": []
     },
     {
@@ -50,8 +50,14 @@
     },
     {
       "number": 9,
+      "id": "slack-notifier",
+      "label": "slack-notifier — Central Slack integration",
+      "dependsOn": ["roxctl-env"]
+    },
+    {
+      "number": 10,
       "id": "splunk",
-      "label": "(deferred) splunk — Splunk skill scripts",
+      "label": "splunk — Splunk Operator + TA (splunk-lab.sh)",
       "dependsOn": []
     }
   ]

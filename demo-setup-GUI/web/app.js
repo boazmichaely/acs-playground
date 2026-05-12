@@ -5,16 +5,20 @@ const modSelectionCount = document.getElementById("modSelectionCount");
 const moduleBulkBar = document.getElementById("moduleBulkBar");
 const statusWrap = document.getElementById("statusWrap");
 
-/** Same canonical map as server `canonical_module_slug` — aligns manifest ids with `acs-demo-setup.sh --status`. */
+/**
+ * Canonical module ids for status/API come from `acs-demo-setup.sh --status`. Manifest `modules.json` may use
+ * display ids (e.g. ocp-OAuth); GET /api/modules includes `canonicalAliases` (authoritative copy of server
+ * MODULE_ID_CANONICAL_ALIASES). Fallback below is only for stale servers.
+ */
+let canonicalAliasesFromServer = { "ocp-OAuth": "ocp-oauth" };
+
 function canonicalSlugForStatus(slug) {
-  const aliases = { "ocp-OAuth": "ocp-oauth" };
-  return aliases[slug] || slug;
+  return canonicalAliasesFromServer[slug] || slug;
 }
 
-// Only Splunk is still deferred; Central + secured cluster now have real --status rows.
-const DEFERRED_MODULE_SLUGS = new Set(["splunk"]);
+const DEFERRED_MODULE_SLUGS = new Set([]);
 
-/** Canonical `/api/run` slugs in `acs-demo-setup.sh` order (Central → SC → demo). Splunk excluded (not wired). */
+/** Canonical `/api/run` slugs: ACS demo script order, then Splunk last (`splunk-lab.sh`). Includes `slack-notifier` (Central Slack integration). */
 const FULL_INSTALL_SLUGS_ORDERED = [
   "central",
   "secured-cluster",
@@ -23,6 +27,8 @@ const FULL_INSTALL_SLUGS_ORDERED = [
   "ocp-users",
   "ocp-oauth",
   "acs-users",
+  "slack-notifier",
+  "splunk",
 ];
 
 /** Filled in loadModules: canonical id → { dependsOn: canonical[] } */
@@ -31,7 +37,9 @@ let moduleMetaByCanonical = new Map();
 let lastStatusMap = new Map();
 /** Full `modules` array from last `/api/status` (includes securedCluster breakdown). */
 let lastStatusModules = [];
-let lastPreflight = null;
+
+/** Parsed from last streamed install log (`print_install_footer`); cleared when a new run starts. */
+let lastOcpUsersPasswordsFromLog = [];
 
 let statusRefreshIntervalId = null;
 
@@ -49,6 +57,49 @@ function log(line) {
 
 function clearLog() {
   logEl.textContent = "";
+  lastOcpUsersPasswordsFromLog = [];
+}
+
+/**
+ * Option B: extract adam/boaz/chris lines from `acs-demo-setup.sh` `print_install_footer` in the log.
+ * Anchor: "OpenShift users (passwords generated or merged this run" … lines like "  adam / <password>".
+ */
+function parseOcpUsersPasswordsFromLog(text) {
+  const raw = String(text ?? "");
+  const key = "OpenShift users (passwords generated or merged this run";
+  const idx = raw.lastIndexOf(key);
+  if (idx === -1) return [];
+  const tail = raw.slice(idx);
+  const lines = tail.split(/\r?\n/);
+  const out = [];
+  const re = /^\s*(adam|boaz|chris)\s*\/\s*(.*)$/i;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(re);
+    if (m) {
+      out.push({ login: m[1].toLowerCase(), password: (m[2] ?? "").trim() });
+      continue;
+    }
+    if (out.length > 0) {
+      const t = line.trim();
+      if (t === "" || t.startsWith("OpenShift users")) continue;
+      if (t.includes("(unknown)")) continue;
+      break;
+    }
+  }
+  return out;
+}
+
+function ocpUsersPasswordsCollapseHtml() {
+  const rows = lastOcpUsersPasswordsFromLog;
+  if (!Array.isArray(rows) || rows.length === 0) return "";
+  const body = rows
+    .map(
+      (r) =>
+        `<div class="ocp-users-pw-row"><span class="ocp-users-pw-login">${escapeHtml(r.login)}</span> <code class="ocp-users-pw-code">${escapeHtml(r.password)}</code></div>`,
+    )
+    .join("");
+  return `<details class="sc-levels re-env-levels"><summary class="sc-levels__sum">HTPasswd</summary><div class="sc-levels__body">${body}</div></details>`;
 }
 
 function getModuleCheckboxes() {
@@ -64,6 +115,14 @@ function collectCheckboxByCanonical() {
   }
   return m;
 }
+
+/**
+ * UI-only module state (exception: "logic lives in the script" rule):
+ * Checkbox lock/disable for rows whose `dependsOn` are not yet `ready` in the last `/api/status`.
+ * The bootstrap script cannot know which modules the user will run in this GUI session, so we treat
+ * "checked for this run" as satisfying a dependency alongside `ready`. All detail text, URLs, and
+ * API-id stripping come from `acs-demo-setup.sh --status` (plus server merge for Splunk), not here.
+ */
 
 /** Dependency satisfied if dependant is `ready` in status OR its checkbox is checked. */
 function prereqDepMet(depCanonical, statusMap, cbByCanon) {
@@ -137,7 +196,7 @@ function syncMasterCheckbox() {
   moduleBulkBar.classList.toggle("bulk-toolbar--has-selection", checked > 0);
 }
 
-/** Select / clear the runnable full-install set (Central through acs-users). Splunk is never toggled here. */
+/** Select / clear the runnable full-install set (includes Splunk when selected). */
 function applySelectAll(on) {
   if (!on) {
     getModuleCheckboxes().forEach((c) => {
@@ -147,14 +206,22 @@ function applySelectAll(on) {
     syncMasterCheckbox();
     return;
   }
-  for (let pass = 0; pass < 8; pass++) {
+  // After each pass, re-run locks: selecting a parent can unlock dependents (e.g. central → secured-cluster).
+  // Each pass is cheap (~9 rows); cost adds up only when we repeat. Exit early if no checkbox flipped on
+  // this pass (already fully selected). Cap 5 passes for deep chains; more suggests inconsistent metadata.
+  for (let pass = 0; pass < 5; pass++) {
     const cbByCanon = collectCheckboxByCanonical();
+    let anyNewlyChecked = false;
     for (const slug of FULL_INSTALL_SLUGS_ORDERED) {
       const canonical = canonicalSlugForStatus(slug);
       const cb = cbByCanon.get(canonical);
-      if (cb && !cb.disabled) cb.checked = true;
+      if (cb && !cb.disabled) {
+        if (!cb.checked) anyNewlyChecked = true;
+        cb.checked = true;
+      }
     }
     syncDependencyLocks();
+    if (!anyNewlyChecked) break;
   }
   syncMasterCheckbox();
 }
@@ -167,16 +234,60 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-/** Strip opaque API ids (UUIDs) from status detail; prefer script messages that use names. */
-function sanitizeDetailForDisplay(text) {
-  if (text == null || text === "") return "";
-  let s = String(text);
-  s = s.replace(/\bid\s*=\s*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/gi, "");
-  s = s.replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g, "");
-  s = s.replace(/\(\s*\)/g, "");
-  s = s.replace(/\s{2,}/g, " ").trim();
-  s = s.replace(/^[,;\s]+|[,;\s]+$/g, "");
-  return s;
+/** Escape plain text; split on embedded schemes so `…comhttps://…` yields two links. */
+function linkifyHttpsUrls(text) {
+  const raw = String(text ?? "");
+  const pieces = raw.split(/(?=https?:\/\/)/);
+  let out = "";
+  for (const piece of pieces) {
+    if (!piece) continue;
+    if (/^https?:\/\//.test(piece)) {
+      const reOne = /^https?:\/\/[A-Za-z0-9.-]+(?::\d+)?(?:\/[^\s<>"'()[\]{}]*)?/;
+      const m = piece.match(reOne);
+      if (m) {
+        const url = m[0].replace(/[),.;]+$/g, "");
+        const rest = piece.slice(m[0].length);
+        out += `<a class="module-detail-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
+        out += /^https?:\/\//.test(rest) ? linkifyHttpsUrls(rest) : escapeHtml(rest);
+        continue;
+      }
+    }
+    out += escapeHtml(piece);
+  }
+  return out;
+}
+
+/** One-line module detail: linkify https URLs only (`--status` / server produce plain text). */
+function linkifiedModuleDetailHtml(detailRaw) {
+  const t = String(detailRaw ?? "").trim();
+  return t ? linkifyHttpsUrls(t) : "";
+}
+
+/** Prefer `modules[].detailLink` from acs-demo-setup.sh `--status` JSON over bare-URL linkification. */
+function moduleDetailLinkOrLinkify(st, detailRaw) {
+  const dl = st && st.detailLink && typeof st.detailLink === "object" ? st.detailLink : null;
+  const href = dl && dl.href != null ? String(dl.href).trim() : "";
+  const lab = dl && dl.label != null ? String(dl.label).trim() : "";
+  if (href && lab) {
+    return `<a class="module-detail-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(lab)}</a>`;
+  }
+  if (href) {
+    return `<a class="module-detail-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(href)}</a>`;
+  }
+  return linkifiedModuleDetailHtml(detailRaw);
+}
+
+/** One-line Splunk Web URL: prefer https:// from status detail; else first Route host (legacy rows with splunkRoutes). */
+function splunkWebUrlLineHtml(row, detailRaw) {
+  const d = String(detailRaw ?? "").trim();
+  if (/\bhttps:\/\//i.test(d)) return linkifiedModuleDetailHtml(d);
+  const routes = row && Array.isArray(row.splunkRoutes) ? row.splunkRoutes : [];
+  const pick =
+    routes.find((r) => String(r && r.name != null ? r.name : "").trim() === "splunk-web") || routes[0];
+  const host = pick && pick.host != null ? String(pick.host).trim() : "";
+  if (!host) return "";
+  const href = /^https?:\/\//i.test(host) ? host : `https://${host}`;
+  return `<a class="module-detail-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(href)}</a>`;
 }
 
 function dependsOnHintHtml(m) {
@@ -217,43 +328,24 @@ function statusMapFromModules(modules) {
   const map = new Map();
   if (!Array.isArray(modules)) return map;
   for (const row of modules) {
-    if (!row || typeof row.id !== "string") continue;
-    map.set(row.id, {
+    if (!row || row.id == null) continue;
+    const mid = String(row.id).trim();
+    if (!mid) continue;
+    const dlRaw = row.detailLink && typeof row.detailLink === "object" ? row.detailLink : null;
+    const href = dlRaw && dlRaw.href != null ? String(dlRaw.href).trim() : "";
+    const label = dlRaw && dlRaw.label != null ? String(dlRaw.label).trim() : "";
+    const detailLink =
+      href && label ? { href, label } : href ? { href, label: href } : null;
+    map.set(mid, {
       state: row.state != null ? String(row.state) : "",
       detail: row.detail != null ? String(row.detail) : "",
+      detailLink,
     });
   }
   return map;
 }
 
-function centralUrlFromPreflight(pf) {
-  if (!pf || typeof pf !== "object") return "";
-  const checks = Array.isArray(pf.checks) ? pf.checks : [];
-  const row = checks.find((c) => c && c.name === "ACS_CENTRAL_URL" && c.ok);
-  if (row && row.detail) return String(row.detail).trim();
-  const env = pf.environment && typeof pf.environment === "object" ? pf.environment : null;
-  const u = env && env.ACS_CENTRAL_URL != null ? String(env.ACS_CENTRAL_URL).trim() : "";
-  return u || "";
-}
-
-function securedClusterNameFromPreflight(pf) {
-  if (!pf || typeof pf !== "object") return "";
-  const rs = pf.resolved && typeof pf.resolved === "object" ? pf.resolved : null;
-  let n = rs && rs.SECURED_CLUSTER_NAME != null ? String(rs.SECURED_CLUSTER_NAME).trim() : "";
-  if (n) return n;
-  const env = pf.environment && typeof pf.environment === "object" ? pf.environment : null;
-  if (env && env._resolved_SECURED_CLUSTER_NAME != null) {
-    n = String(env._resolved_SECURED_CLUSTER_NAME).trim();
-  }
-  return n || "";
-}
-
-function detailLineForModule(canonicalId, statusMap, preflight) {
-  if (DEFERRED_MODULE_SLUGS.has(canonicalId)) {
-    if (canonicalId === "splunk") {
-      return "Deferred — Splunk skill integration not wired in this UI yet.";
-    }
-  }
+function detailLineForModule(canonicalId, statusMap) {
   const st = statusMap.get(canonicalId);
   return st && st.detail ? st.detail : "";
 }
@@ -272,7 +364,7 @@ function roxctlAdminApiTokenBlockHtml(admin) {
   const st = admin.state != null ? String(admin.state) : "unknown";
   const nm = admin.tokenName != null ? String(admin.tokenName).trim() : "roxctl-admin";
   const envHas = admin.envHasToken === true;
-  const det = admin.detail ? sanitizeDetailForDisplay(String(admin.detail)) : "";
+  const det = admin.detail ? String(admin.detail).trim() : "";
   const envCell = envHas ? "yes" : "no";
   let sum = `API token · ${nm}`;
   if (st === "present") sum += " · on Central";
@@ -325,7 +417,7 @@ function securedClusterLevelsBlockHtml(sc) {
   const rows = SC_LEVEL_ORDER.map((k) => {
     const L = levels[k];
     const state = L && L.state != null ? String(L.state) : "—";
-    const det = sanitizeDetailForDisplay(L && L.detail ? L.detail : "");
+    const det = L && L.detail ? String(L.detail).trim() : "";
     const name = SC_LEVEL_LABEL[k] || k;
     const stCls = ["ready", "partial", "absent", "unknown"].includes(state) ? state : "unknown";
     return `<div class="sc-level"><span class="sc-level__name">${escapeHtml(name)}</span><span class="sc-level__state sc-level__state--${stCls}">${escapeHtml(state)}</span><span class="sc-level__det">${escapeHtml(det)}</span></div>`;
@@ -349,7 +441,7 @@ function badgeOnlyHtml(canonicalId, statusMap) {
     return `<span class="module-status-badge module-status-badge--pending">…</span>`;
   }
   const { state, detail } = st;
-  const title = escapeHtml(sanitizeDetailForDisplay(detail));
+  const title = escapeHtml(String(detail ?? "").trim());
   switch (state) {
     case "ready":
       return `<span class="module-status-badge module-status-badge--ready" title="${title}"><span class="module-status-badge__icon" aria-hidden="true">✓</span> Installed</span>`;
@@ -364,7 +456,7 @@ function badgeOnlyHtml(canonicalId, statusMap) {
   }
 }
 
-function moduleStatusCellInnerHtml(canonicalId, statusMap, preflight) {
+function moduleStatusCellInnerHtml(canonicalId, statusMap) {
   const badge = badgeOnlyHtml(canonicalId, statusMap);
   let detailInner = "";
   if (canonicalId === "roxctl-env") {
@@ -374,25 +466,48 @@ function moduleStatusCellInnerHtml(canonicalId, statusMap, preflight) {
         ? row.roxctlEnvConsistency
         : null;
     const layers = cc && roxctlEnvConsistencyBlockHtml(cc);
-    const summaryLine = detailLineForModule(canonicalId, statusMap, preflight);
-    const sumEsc = summaryLine ? escapeHtml(sanitizeDetailForDisplay(summaryLine)) : "";
-    detailInner = `${sumEsc ? `<div class="sc-overall">${sumEsc}</div>` : ""}${layers || ""}`;
+    const summaryLine = detailLineForModule(canonicalId, statusMap);
+    const sumHtml = summaryLine ? linkifiedModuleDetailHtml(summaryLine) : "";
+    detailInner = `${sumHtml ? `<div class="sc-overall">${sumHtml}</div>` : ""}${layers || ""}`;
     if (!String(detailInner).trim()) detailInner = "—";
   } else if (canonicalId === "secured-cluster") {
     const row = lastStatusModules.find((x) => x && x.id === "secured-cluster");
     const sc = row && row.securedCluster && typeof row.securedCluster === "object" ? row.securedCluster : null;
     const layers = sc && securedClusterLevelsBlockHtml(sc);
-    const summaryLine = detailLineForModule(canonicalId, statusMap, preflight);
-    const sumEsc = summaryLine ? escapeHtml(sanitizeDetailForDisplay(summaryLine)) : "";
+    const summaryLine = detailLineForModule(canonicalId, statusMap);
+    const sumHtml = summaryLine ? linkifiedModuleDetailHtml(summaryLine) : "";
     if (layers) {
-      detailInner = `${sumEsc ? `<div class="sc-overall">${sumEsc}</div>` : ""}${layers}`;
+      detailInner = `${sumHtml ? `<div class="sc-overall">${sumHtml}</div>` : ""}${layers}`;
     } else {
-      detailInner = sumEsc || "—";
+      detailInner = sumHtml || "—";
     }
+  } else if (canonicalId === "splunk") {
+    const row = lastStatusModules.find((x) => x && x.id === "splunk");
+    const summaryLine = detailLineForModule(canonicalId, statusMap);
+    const urlLine = splunkWebUrlLineHtml(row, summaryLine);
+    detailInner = urlLine ? `<div class="sc-overall">${urlLine}</div>` : (summaryLine ? linkifiedModuleDetailHtml(summaryLine) : "—");
+  } else if (canonicalId === "ocp-users") {
+    const stOcp = statusMap.get(canonicalId);
+    const detailRaw = detailLineForModule(canonicalId, statusMap);
+    let sumHtml = linkifiedModuleDetailHtml(detailRaw);
+    const pwHtml = ocpUsersPasswordsCollapseHtml();
+    if (
+      !sumHtml &&
+      !pwHtml &&
+      stOcp &&
+      (stOcp.state === "ready" || stOcp.state === "partial")
+    ) {
+      sumHtml = escapeHtml("passwords are unknown");
+    }
+    const parts = [];
+    if (sumHtml) parts.push(`<div class="sc-overall">${sumHtml}</div>`);
+    if (pwHtml) parts.push(pwHtml);
+    detailInner = parts.length ? parts.join("") : "—";
   } else {
-    const detailRaw = detailLineForModule(canonicalId, statusMap, preflight);
-    const cleaned = sanitizeDetailForDisplay(detailRaw);
-    detailInner = cleaned ? escapeHtml(cleaned) : "—";
+    const st = statusMap.get(canonicalId);
+    const detailRaw = detailLineForModule(canonicalId, statusMap);
+    const sumHtml = moduleDetailLinkOrLinkify(st, detailRaw);
+    detailInner = sumHtml ? `<div class="sc-overall">${sumHtml}</div>` : "—";
   }
   return `<div class="module-status-split">
     <div class="module-status-split__badge">${badge}</div>
@@ -400,11 +515,10 @@ function moduleStatusCellInnerHtml(canonicalId, statusMap, preflight) {
   </div>`;
 }
 
-function applyModuleStatuses(statusModules, preflight) {
+function applyModuleStatuses(statusModules) {
   lastStatusModules = Array.isArray(statusModules) ? statusModules : [];
   const map = statusMapFromModules(statusModules);
   lastStatusMap = map;
-  lastPreflight = preflight && typeof preflight === "object" ? preflight : null;
 
   const rows = modulesTbody.querySelectorAll("tr[data-module-canonical]");
   rows.forEach((tr) => {
@@ -412,7 +526,7 @@ function applyModuleStatuses(statusModules, preflight) {
     if (!cid) return;
     const cell = tr.querySelector(".js-module-status-cell");
     if (!cell) return;
-    cell.innerHTML = moduleStatusCellInnerHtml(cid, map, lastPreflight);
+    cell.innerHTML = moduleStatusCellInnerHtml(cid, map);
   });
   syncDependencyLocks();
   syncMasterCheckbox();
@@ -435,6 +549,9 @@ async function loadModules() {
     return;
   }
   const data = await r.json();
+  if (data && typeof data.canonicalAliases === "object" && data.canonicalAliases !== null) {
+    canonicalAliasesFromServer = { ...canonicalAliasesFromServer, ...data.canonicalAliases };
+  }
   const list = data.modules || [];
 
   moduleMetaByCanonical = new Map();
@@ -478,7 +595,7 @@ async function loadModules() {
   getModuleCheckboxes().forEach((cb) => {
     cb.addEventListener("change", onModuleCheckboxChange);
   });
-  applyModuleStatuses([], lastPreflight);
+  applyModuleStatuses([]);
 }
 
 function selectedSlugs() {
@@ -505,7 +622,9 @@ function renderPreflight(pf) {
     let body = `<table class="status compact preflight-checks"><tr><th>Name</th><th>OK</th><th>Detail</th></tr>`;
     for (const c of pf.checks) {
       const rowOk = c.ok ? "yes" : "no";
-      body += `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(rowOk)}</td><td>${escapeHtml(c.detail)}</td></tr>`;
+      const dRaw = c.detail != null ? String(c.detail).trim() : "";
+      const detailCell = dRaw ? linkifyHttpsUrls(dRaw) : "—";
+      body += `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(rowOk)}</td><td>${detailCell}</td></tr>`;
     }
     body += `</table>`;
     html += collapsibleSection(`Checks (${pf.checks.length})`, body, true);
@@ -627,7 +746,7 @@ async function refreshStatus() {
     syncPreflightExpandAllButton();
 
     const mods = body.modules || [];
-    applyModuleStatuses(mods, pf);
+    applyModuleStatuses(mods);
   } catch (e) {
     statusWrap.innerHTML = collapsibleSection(
       "Refresh failed",
@@ -715,7 +834,9 @@ async function runModules(mods, opts = {}) {
     body: JSON.stringify(payload),
   });
   const ok = await drainStreamingRunResponse(r);
+  lastOcpUsersPasswordsFromLog = parseOcpUsersPasswordsFromLog(logEl.textContent);
   if (ok) await refreshStatus();
+  else if (lastStatusModules.length) applyModuleStatuses(lastStatusModules);
 }
 
 document.getElementById("btnRun").onclick = async () => {
