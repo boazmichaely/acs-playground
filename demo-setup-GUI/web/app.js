@@ -4,6 +4,7 @@ const modSelectAll = document.getElementById("modSelectAll");
 const modSelectionCount = document.getElementById("modSelectionCount");
 const moduleBulkBar = document.getElementById("moduleBulkBar");
 const statusWrap = document.getElementById("statusWrap");
+const credFilePath = document.getElementById("credFilePath");
 
 /**
  * Canonical module ids for status/API come from `acs-demo-setup.sh --status`. Manifest `modules.json` may use
@@ -23,6 +24,7 @@ const FULL_INSTALL_SLUGS_ORDERED = [
   "central",
   "secured-cluster",
   "ms-demo",
+  "init-demo",
   "registries",
   "ocp-users",
   "ocp-oauth",
@@ -42,6 +44,7 @@ let lastStatusModules = [];
 let lastOcpUsersPasswordsFromLog = [];
 
 let statusRefreshIntervalId = null;
+let credSaveFeedbackTimer = null;
 
 function clearStatusRefreshInterval() {
   if (statusRefreshIntervalId !== null) {
@@ -263,9 +266,19 @@ function linkifiedModuleDetailHtml(detailRaw) {
   return t ? linkifyHttpsUrls(t) : "";
 }
 
-/** Prefer `modules[].detailLink` from acs-demo-setup.sh `--status` JSON over bare-URL linkification. */
+/** Structured link on a status row: `configuredHyperlink` (REQUIREMENTS); `detailLink` accepted for older `--status` JSON. */
+function moduleRowLinkObject(rowOrSt) {
+  const o = rowOrSt && typeof rowOrSt === "object" ? rowOrSt : null;
+  if (!o) return null;
+  const ch = o.configuredHyperlink && typeof o.configuredHyperlink === "object" ? o.configuredHyperlink : null;
+  if (ch) return ch;
+  const legacy = o.detailLink && typeof o.detailLink === "object" ? o.detailLink : null;
+  return legacy;
+}
+
+/** Prefer structured row link from `--status` JSON over bare-URL linkification of `detail`. */
 function moduleDetailLinkOrLinkify(st, detailRaw) {
-  const dl = st && st.detailLink && typeof st.detailLink === "object" ? st.detailLink : null;
+  const dl = moduleRowLinkObject(st);
   const href = dl && dl.href != null ? String(dl.href).trim() : "";
   const lab = dl && dl.label != null ? String(dl.label).trim() : "";
   if (href && lab) {
@@ -331,15 +344,15 @@ function statusMapFromModules(modules) {
     if (!row || row.id == null) continue;
     const mid = String(row.id).trim();
     if (!mid) continue;
-    const dlRaw = row.detailLink && typeof row.detailLink === "object" ? row.detailLink : null;
+    const dlRaw = moduleRowLinkObject(row);
     const href = dlRaw && dlRaw.href != null ? String(dlRaw.href).trim() : "";
     const label = dlRaw && dlRaw.label != null ? String(dlRaw.label).trim() : "";
-    const detailLink =
+    const configuredHyperlink =
       href && label ? { href, label } : href ? { href, label: href } : null;
     map.set(mid, {
       state: row.state != null ? String(row.state) : "",
       detail: row.detail != null ? String(row.detail) : "",
-      detailLink,
+      configuredHyperlink,
     });
   }
   return map;
@@ -539,6 +552,68 @@ modSelectAll.addEventListener("change", () => {
 function onModuleCheckboxChange() {
   syncDependencyLocks();
   syncMasterCheckbox();
+}
+
+async function loadCentralCredentials() {
+  const r = await fetch("/api/central-credentials");
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(j.error || r.statusText || "failed to load credentials");
+  }
+  credFilePath.textContent = j.path || "—";
+  const d = j.data || {};
+  document.getElementById("credCentralEndpoint").value = d.centralEndpoint || "";
+  document.getElementById("credApiKey").value = d.apiKey || "";
+  document.getElementById("credAdminUsername").value = d.adminUsername || "admin";
+  document.getElementById("credAdminPassword").value = d.adminPassword || "";
+  const pref = (d.authPreference || "apiKey").toLowerCase() === "password" ? "password" : "apiKey";
+  const pr = document.querySelector(`input[name="authPreference"][value="${pref}"]`);
+  if (pr) pr.checked = true;
+}
+
+async function saveCentralCredentials() {
+  const btn = document.getElementById("btnCredSave");
+  const fb = document.getElementById("credSaveFeedback");
+  if (credSaveFeedbackTimer) {
+    clearTimeout(credSaveFeedbackTimer);
+    credSaveFeedbackTimer = null;
+  }
+  fb.textContent = "";
+  fb.classList.remove("cred-save-feedback--err");
+  btn.disabled = true;
+  const prefEl = document.querySelector('input[name="authPreference"]:checked');
+  const authPreference = prefEl && prefEl.value === "password" ? "password" : "apiKey";
+  const body = {
+    centralEndpoint: document.getElementById("credCentralEndpoint").value.trim(),
+    apiKey: document.getElementById("credApiKey").value,
+    adminUsername: document.getElementById("credAdminUsername").value.trim() || "admin",
+    adminPassword: document.getElementById("credAdminPassword").value,
+    authPreference,
+  };
+  try {
+    const r = await fetch("/api/central-credentials", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      fb.textContent = j.error || j.detail || "Save failed";
+      fb.classList.add("cred-save-feedback--err");
+      return;
+    }
+    credFilePath.textContent = j.path || credFilePath.textContent;
+    fb.textContent = "Saved";
+    credSaveFeedbackTimer = setTimeout(() => {
+      fb.textContent = "";
+      credSaveFeedbackTimer = null;
+    }, 2800);
+  } catch (e) {
+    fb.textContent = String(e.message || e);
+    fb.classList.add("cred-save-feedback--err");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function loadModules() {
@@ -792,23 +867,22 @@ function confirmRoxctlEnvSyncRun() {
   );
 }
 
-/** @returns {boolean} whether user chose to allow ~/.roxctl/set-env.sh ROX_ENDPOINT update */
+/** @returns {boolean} whether user chose to merge Central Route into central-credentials.json (not ~/.roxctl/set-env.sh) */
 function confirmRoxctlEnvUpdate(slugs) {
   if (!selectionIncludesCentral(slugs)) return false;
   return window.confirm(
     [
       "This run includes the Central module (install-central).",
       "",
-      "If you click OK, acs-demo-setup.sh will update on this machine:",
-      "  ~/.roxctl/set-env.sh",
+      "If you click OK, acs-demo-setup.sh will merge the OpenShift Central Route into your",
+      "central-credentials.json file (field centralEndpoint — https://… from route \"central\" in namespace stackrox,",
+      "unless you override CENTRAL_ROUTE_NAME / STACKROX_NAMESPACE in the shell).",
       "",
-      "It will set ROX_ENDPOINT from the OpenShift Route in your current oc context",
-      "(route name \"central\", namespace stackrox — override with CENTRAL_ROUTE_NAME / STACKROX_NAMESPACE in the shell if needed).",
+      "Other fields in that JSON (apiKey, adminPassword, authPreference, …) are preserved.",
+      "~/.roxctl/set-env.sh is not updated by install-central — only the roxctl-env module changes that file.",
       "",
-      "Existing lines (e.g. ROX_API_TOKEN) are kept; only ROX_ENDPOINT is added or replaced.",
-      "",
-      "Cancel = run without changing that file.",
-      "OK = update the file after Central install / noop.",
+      "Cancel = run without updating the credentials JSON.",
+      "OK = update centralEndpoint after Central install / noop.",
     ].join("\n"),
   );
 }
@@ -870,4 +944,13 @@ document.getElementById("btnPreflightExpandAll").addEventListener("click", (e) =
   );
 });
 
-loadModules().then(() => refreshStatus());
+document.getElementById("btnCredSave").onclick = () => {
+  saveCentralCredentials().catch((e) => alert(String(e.message || e)));
+};
+
+Promise.all([
+  loadCentralCredentials().catch((e) => {
+    credFilePath.textContent = `(${String(e.message || e)})`;
+  }),
+  loadModules(),
+]).then(() => refreshStatus());

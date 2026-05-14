@@ -2,7 +2,121 @@
  * ACS demo setup GUI — PatternFly tokens + local layout (no external repo links).
  */
 
-/* ~12.5% larger type site-wide (PF rem scale) */
+.cred-path-line {
+  margin: 0 0 var(--pf-v5-global--spacer--md);
+}
+
+/* Central credentials: standalone collapsible (not part of status preflight expand-all) */
+details.cred-panel {
+  margin: 0 0 var(--pf-v5-global--spacer--lg);
+  border: 1px solid var(--pf-v5-global--BorderColor--100);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+  background: var(--pf-v5-global--BackgroundColor--100);
+  box-shadow: 0 0.0625rem 0.125rem rgba(3, 3, 3, 0.12);
+}
+
+.cred-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-v5-global--spacer--sm);
+  list-style: none;
+  cursor: pointer;
+  padding: var(--pf-v5-global--spacer--sm) var(--pf-v5-global--spacer--md);
+  font-size: var(--pf-v5-global--FontSize--lg);
+  font-weight: var(--pf-v5-global--FontWeight--semibold);
+  color: var(--pf-v5-global--Color--100);
+  background: var(--pf-v5-global--BackgroundColor--100);
+  border: none;
+  border-left: 3px solid var(--pf-v5-global--primary-color--100);
+  border-radius: var(--pf-v5-global--BorderRadius--sm) var(--pf-v5-global--BorderRadius--sm) 0 0;
+  user-select: none;
+}
+
+.cred-panel__toggle::-webkit-details-marker {
+  display: none;
+}
+
+details.cred-panel:not([open]) .cred-panel__toggle {
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+}
+
+details.cred-panel[open] .cred-panel__toggle {
+  border-bottom: 1px solid var(--pf-v5-global--BorderColor--100);
+}
+
+.cred-panel__chev {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--pf-v5-global--Color--200);
+  border-bottom: 2px solid var(--pf-v5-global--Color--200);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+details.cred-panel[open] .cred-panel__chev {
+  transform: rotate(45deg);
+  margin-top: -2px;
+}
+
+.cred-panel__title {
+  flex: 1;
+}
+
+.cred-panel__body {
+  padding: var(--pf-v5-global--spacer--md);
+  padding-top: var(--pf-v5-global--spacer--sm);
+}
+
+.cred-panel__body .pf-v5-c-card {
+  box-shadow: none;
+  border: 1px solid var(--pf-v5-global--BorderColor--100);
+}
+
+.cred-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--pf-v5-global--spacer--sm) var(--pf-v5-global--spacer--md);
+  margin-bottom: var(--pf-v5-global--spacer--md);
+}
+
+.cred-save-feedback {
+  min-height: 1.25rem;
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--success-color--200);
+}
+
+.cred-save-feedback.cred-save-feedback--err {
+  color: var(--pf-v5-global--danger-color--200);
+}
+
+.cred-path-label {
+  margin-right: var(--pf-v5-global--spacer--xs);
+}
+
+.cred-file-path {
+  display: inline;
+  word-break: break-all;
+  font-size: var(--pf-v5-global--FontSize--sm);
+}
+
+.cred-auth-pref {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-v5-global--spacer--md);
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cred-form .pf-v5-c-form__group {
+  margin-bottom: var(--pf-v5-global--spacer--md);
+}
+
 html {
   font-size: 112.5%;
 }

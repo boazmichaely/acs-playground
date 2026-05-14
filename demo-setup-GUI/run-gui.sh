@@ -2,6 +2,28 @@
 # Local GUI for acs-demo-setup (Stage 4). Requires server/.venv (see README).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# Lab env: optional for OpenShift / lab-only vars. Central URL + API auth are read from the skill JSON
+# (~/.cursor/skills/acs-demo-setup/config/central-credentials.json by default) by acs-demo-setup.sh when that file exists.
+acs_gui_source_lab_env() {
+  local f=""
+  if [[ -n "${ACS_ENV_FILE:-}" && -f "${ACS_ENV_FILE}" ]]; then
+    f="${ACS_ENV_FILE}"
+  elif [[ -f "${ROOT}/../acs-playground.local.env" ]]; then
+    f="${ROOT}/../acs-playground.local.env"
+  elif [[ -f "${ROOT}/acs-playground.local.env" ]]; then
+    f="${ROOT}/acs-playground.local.env"
+  fi
+  [[ -z "${f}" ]] && return 0
+  echo "==> Sourcing lab env: ${f}"
+  set -a
+  # shellcheck source=/dev/null
+  source "${f}"
+  set +a
+  export ACS_ENV_FILE="${f}"
+}
+acs_gui_source_lab_env
+
 SKILL_SCRIPT="${HOME}/.cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh"
 if [[ -z "${ACS_DEMO_SETUP_SCRIPT:-}" ]]; then
   if [[ ! -f "${SKILL_SCRIPT}" ]]; then

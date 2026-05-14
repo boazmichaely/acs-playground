@@ -5,6 +5,7 @@ Bind 127.0.0.1 only. All cluster/auth checks live in the bootstrap script — th
 from __future__ import annotations
 
 import atexit
+import base64
 import json
 import os
 import re
@@ -21,6 +22,21 @@ CONFIG = ROOT / "config" / "modules.json"
 
 _SKILL_SCRIPT = Path.home() / ".cursor/skills/acs-demo-setup/scripts/acs-demo-setup.sh"
 _SPLUNK_LAB_SCRIPT = Path.home() / ".cursor/skills/rhacs-splunk-ta-demo-skill/scripts/splunk-lab.sh"
+
+_FAVICON_DATA_URI_CACHE: str | None = None
+
+
+def _favicon_data_uri() -> str:
+    """Inline tab icon: Chromium often skips favicons that only arrive via redirect or second-hop fetch."""
+    global _FAVICON_DATA_URI_CACHE
+    if _FAVICON_DATA_URI_CACHE is not None:
+        return _FAVICON_DATA_URI_CACHE
+    p = WEB / "favicon.png"
+    if not p.is_file():
+        _FAVICON_DATA_URI_CACHE = ""
+        return _FAVICON_DATA_URI_CACHE
+    _FAVICON_DATA_URI_CACHE = "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode("ascii")
+    return _FAVICON_DATA_URI_CACHE
 
 
 def default_script_path() -> Path:
@@ -39,6 +55,7 @@ MODULE_ID_CANONICAL_ALIASES: dict[str, str] = {"ocp-OAuth": "ocp-oauth"}
 KNOWN_MODULE_SLUGS = frozenset(
     {
         "ms-demo",
+        "init-demo",
         "registries",
         "ocp-users",
         "ocp-oauth",
@@ -57,6 +74,7 @@ RUNNABLE_SLUGS = frozenset(
         "roxctl-env",
         "secured-cluster",
         "ms-demo",
+        "init-demo",
         "registries",
         "ocp-users",
         "ocp-oauth",
@@ -171,6 +189,26 @@ def script_path() -> Path:
     return Path(p).expanduser()
 
 
+def central_credentials_path() -> Path:
+    """Same default as acs-demo-setup.sh: <skill>/config/central-credentials.json next to scripts/."""
+    p = os.environ.get("ACS_CENTRAL_CREDENTIALS_FILE")
+    if p:
+        return Path(p).expanduser().resolve()
+    sp = script_path().resolve()
+    return (sp.parent.parent / "config" / "central-credentials.json").resolve()
+
+
+CREDENTIALS_SCHEMA_RELPATH = "central-credentials.schema.json"
+
+_DEFAULT_CENTRAL_CREDS: dict[str, str] = {
+    "centralEndpoint": "",
+    "apiKey": "",
+    "adminUsername": "admin",
+    "adminPassword": "",
+    "authPreference": "apiKey",
+}
+
+
 def merge_splunk_status(data: dict) -> dict:
     """Append/replace `splunk` module row from splunk-lab.sh --status (skill tree)."""
     spl = splunk_script_path()
@@ -219,7 +257,107 @@ def merge_splunk_status(data: dict) -> dict:
 
 @app.get("/")
 def index():
-    return send_from_directory(app.static_folder, "index.html")
+    body = (WEB / "index.html").read_text(encoding="utf-8")
+    uri = _favicon_data_uri()
+    if uri:
+        body = body.replace("__ACS_GUI_FAVICON_DATA_URI__", uri)
+    resp = Response(body, mimetype="text/html; charset=utf-8")
+    # Avoid stale <head> (favicon links) when the GUI is iterated locally.
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.get("/favicon.ico")
+def favicon_ico():
+    """Same PNG as /favicon.png with 200 + image/png (redirect breaks tab binding in some Chromium builds)."""
+    return send_from_directory(
+        app.static_folder,
+        "favicon.png",
+        mimetype="image/png",
+        max_age=86400,
+        conditional=False,
+    )
+
+
+@app.get("/favicon.png")
+def favicon_png():
+    return send_from_directory(
+        app.static_folder,
+        "favicon.png",
+        mimetype="image/png",
+        max_age=86400,
+        conditional=False,
+    )
+
+
+@app.get("/api/central-credentials")
+def api_central_credentials_get():
+    path = central_credentials_path()
+    data = dict(_DEFAULT_CENTRAL_CREDS)
+    exists = path.is_file()
+    if exists:
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return jsonify({"error": "invalid or unreadable credentials file", "path": str(path)}), 500
+        if isinstance(raw, dict):
+            for k in _DEFAULT_CENTRAL_CREDS:
+                v = raw.get(k)
+                if isinstance(v, str):
+                    data[k] = v
+                elif v is not None:
+                    data[k] = str(v)
+    apref = (data.get("authPreference") or "apiKey").strip().lower()
+    data["authPreference"] = "password" if apref == "password" else "apiKey"
+    return jsonify({"path": str(path), "exists": exists, "data": data})
+
+
+@app.put("/api/central-credentials")
+def api_central_credentials_put():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "JSON object required"}), 400
+    out = dict(_DEFAULT_CENTRAL_CREDS)
+    for k in _DEFAULT_CENTRAL_CREDS:
+        if k not in body:
+            continue
+        v = body[k]
+        if v is None:
+            out[k] = ""
+        elif isinstance(v, str):
+            out[k] = v
+        else:
+            return jsonify({"error": f"{k} must be a string"}), 400
+    if not (out.get("adminUsername") or "").strip():
+        out["adminUsername"] = "admin"
+    apref = (out.get("authPreference") or "apiKey").strip().lower()
+    if apref == "password":
+        out["authPreference"] = "password"
+    else:
+        out["authPreference"] = "apiKey"
+    path = central_credentials_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        base: dict = {}
+        if path.is_file():
+            try:
+                prev = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(prev, dict):
+                    base = prev
+            except (OSError, json.JSONDecodeError):
+                base = {}
+        merged: dict = {"$schema": CREDENTIALS_SCHEMA_RELPATH}
+        for k in _DEFAULT_CENTRAL_CREDS:
+            merged[k] = out[k]
+        for k, v in base.items():
+            if k in merged or k == "$schema":
+                continue
+            merged[k] = v
+        path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+        path.chmod(0o600)
+    except OSError as e:
+        return jsonify({"error": "write failed", "detail": str(e), "path": str(path)}), 500
+    return jsonify({"ok": True, "path": str(path), "data": out})
 
 
 @app.get("/api/modules")
@@ -423,6 +561,7 @@ def main():
     port = int(os.environ.get("ACS_GUI_PORT", "8765"))
     print(f"ACS demo GUI  http://{host}:{port}")
     print(f"Script: {script_path()}")
+    print(f"Central credentials: {central_credentials_path()}")
     print(f"Splunk lab: {splunk_script_path()}")
     app.run(host=host, port=port, threaded=True, debug=False)
 

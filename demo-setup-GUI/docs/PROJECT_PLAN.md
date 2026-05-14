@@ -34,7 +34,7 @@ Headings below match the script’s numbered section comments (e.g. `# ---------
 
 | # | Module ID | Script / notes |
 |---|-----------|----------------|
-| **1** | **ms-demo** | `1) Namespace + demo workload` — **Stage 1:** only **`DEMO_NAMESPACE`** + manifest apply; **`CHRIS_OCP_NAMESPACES`** creation moves to **module 3**. |
+| **1** | **ms-demo** | **Stage 1:** **`MS_DEMO_NAMESPACE`** + **`MS_DEMO_MANIFEST`** apply; **`CHRIS_OCP_NAMESPACES`** creation moves to **module 3**. |
 | **2** | **registries** | `2) ACS registry integration` |
 | **3** | **OCP users** | `3) OpenShift HTPasswd IdP + adam/boaz/chris + RBAC` — plus **`CHRIS_OCP_NAMESPACES`** split out of §1 |
 | **4** | **OCP-OAuth** | `6) OpenShift OAuth auth provider on Central` |

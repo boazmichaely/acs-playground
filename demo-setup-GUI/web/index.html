@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ACS demo setup</title>
-  <link rel="icon" href="/favicon.png" type="image/png" sizes="380x380" />
+  <link rel="icon" type="image/png" href="__ACS_GUI_FAVICON_DATA_URI__" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@5.4.2/patternfly.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@5.4.2/patternfly-addons.css" />
   <link
@@ -21,7 +21,74 @@
       </header>
 
       <div class="demo-pad">
-        <div class="pf-v5-c-card">
+        <details class="cred-panel">
+          <summary class="cred-panel__toggle">
+            <span class="cred-panel__chev" aria-hidden="true"></span>
+            <span class="cred-panel__title">Central credentials</span>
+          </summary>
+          <div class="cred-panel__body">
+            <div class="pf-v5-c-card">
+              <div class="pf-v5-c-card__body pf-m-pt-sm">
+                <div class="cred-actions-row">
+                  <span id="credSaveFeedback" class="cred-save-feedback" aria-live="polite"></span>
+                  <button class="pf-v5-c-button pf-m-primary" type="button" id="btnCredSave">Save</button>
+                </div>
+                <p class="pf-v5-c-helper-text cred-path-line">
+                  <span class="cred-path-label">File:</span>
+                  <code id="credFilePath" class="cred-file-path">—</code>
+                </p>
+                <form id="credForm" class="cred-form" autocomplete="off">
+                  <div class="pf-v5-c-form">
+                    <div class="pf-v5-c-form__group">
+                      <label class="pf-v5-c-form__label" for="credCentralEndpoint">Central endpoint</label>
+                      <input
+                        class="pf-v5-c-form-control"
+                        type="text"
+                        id="credCentralEndpoint"
+                        name="centralEndpoint"
+                        placeholder="https://central-stackrox.apps…"
+                        spellcheck="false"
+                      />
+                    </div>
+                    <div class="pf-v5-c-form__group">
+                      <label class="pf-v5-c-form__label" for="credApiKey">API key</label>
+                      <input class="pf-v5-c-form-control" type="text" id="credApiKey" name="apiKey" spellcheck="false" />
+                    </div>
+                    <div class="pf-v5-c-form__group">
+                      <label class="pf-v5-c-form__label" for="credAdminUsername">Admin username</label>
+                      <input class="pf-v5-c-form-control" type="text" id="credAdminUsername" name="adminUsername" spellcheck="false" />
+                    </div>
+                    <div class="pf-v5-c-form__group">
+                      <label class="pf-v5-c-form__label" for="credAdminPassword">Admin password</label>
+                      <input class="pf-v5-c-form-control" type="password" id="credAdminPassword" name="adminPassword" spellcheck="false" />
+                    </div>
+                    <div class="pf-v5-c-form__group">
+                      <span class="pf-v5-c-form__label" id="credAuthPrefLabel">When both API key and password are set</span>
+                      <fieldset class="cred-auth-pref" aria-labelledby="credAuthPrefLabel">
+                        <label class="pf-v5-c-check">
+                          <input
+                            class="pf-v5-c-check__input"
+                            type="radio"
+                            name="authPreference"
+                            value="apiKey"
+                            checked
+                          />
+                          <span class="pf-v5-c-check__label">Use API key</span>
+                        </label>
+                        <label class="pf-v5-c-check">
+                          <input class="pf-v5-c-check__input" type="radio" name="authPreference" value="password" />
+                          <span class="pf-v5-c-check__label">Use admin password</span>
+                        </label>
+                      </fieldset>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <div class="pf-v5-c-card pf-m-mt-lg">
           <div class="pf-v5-c-card__header">
             <div class="pf-v5-c-card__header-main">
               <div class="pf-v5-c-card__title">
@@ -64,7 +131,7 @@
                 class="pf-v5-c-button pf-m-secondary"
                 type="button"
                 id="btnRunFull"
-                title="Full pipeline in script order: central → roxctl-env → secured-cluster → ms-demo → registries → ocp-users → ocp-oauth → acs-users → slack-notifier → splunk"
+                title="Full pipeline in script order: central → roxctl-env → secured-cluster → ms-demo → init-demo → registries → ocp-users → ocp-oauth → acs-users → slack-notifier → splunk"
               >
                 Run full install
               </button>
