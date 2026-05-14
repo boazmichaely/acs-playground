@@ -61,6 +61,7 @@ KNOWN_MODULE_SLUGS = frozenset(
         "ocp-oauth",
         "acs-users",
         "slack-notifier",
+        "compliance-operator",
         "splunk",
         "central",
         "roxctl-env",
@@ -80,6 +81,7 @@ RUNNABLE_SLUGS = frozenset(
         "ocp-oauth",
         "acs-users",
         "slack-notifier",
+        "compliance-operator",
         "splunk",
     }
 )

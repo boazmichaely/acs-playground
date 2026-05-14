@@ -30,6 +30,7 @@ const FULL_INSTALL_SLUGS_ORDERED = [
   "ocp-oauth",
   "acs-users",
   "slack-notifier",
+  "compliance-operator",
   "splunk",
 ];
 

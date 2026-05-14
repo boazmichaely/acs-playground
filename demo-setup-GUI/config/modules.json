@@ -62,6 +62,12 @@
     },
     {
       "number": 11,
+      "id": "compliance-operator",
+      "label": "compliance-operator — OpenShift Compliance Operator (OLM)",
+      "dependsOn": ["secured-cluster"]
+    },
+    {
+      "number": 12,
       "id": "splunk",
       "label": "splunk — Splunk Operator + TA (splunk-lab.sh)",
       "dependsOn": []
