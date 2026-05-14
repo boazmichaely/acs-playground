@@ -738,7 +738,7 @@ function renderPreflight(pf) {
       body += `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(disp)}</td></tr>`;
     }
     body += `</table>`;
-    html += collapsibleSection(`Environment — effective / masked (${n})`, body, false);
+    html += collapsibleSection(`Environment — effective (${n})`, body, false);
   }
 
   return html;
