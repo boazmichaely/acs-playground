@@ -63,7 +63,7 @@
     {
       "number": 11,
       "id": "compliance-operator",
-      "label": "compliance-operator — OpenShift Compliance Operator (OLM)",
+      "label": "compliance-operator — Compliance Operator + ocp4-cis / ocp4-cis-node scans",
       "dependsOn": ["secured-cluster"]
     },
     {
